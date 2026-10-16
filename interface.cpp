@@ -996,8 +996,17 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
    else if (!strcmp(arg[0], "setboard")) 
    {
 	   stopThought();
+	   if (currentRules == BUGHOUSE)
+	   {
+	   /* Preserve bughouse rules; only re-select the bughouse capture
+	    * handler (setboard must not reset a bughouse game to crazyhouse). */
+	   gameBoard.playBughouse();
+	   }
+	   else
+	   {
 	   currentRules = CRAZYHOUSE;
 	   gameBoard.playCrazyhouse();
+	   }
 	   gameBoard.setBoard(arg[1], arg[2], arg[3], arg[4]);
 	   zapHashValues();
 	   resetAI();
