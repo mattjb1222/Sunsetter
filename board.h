@@ -515,7 +515,9 @@ struct boardStruct {
   void playBughouse();			/* Tells Sunsetter to play bughouse */
   void playCrazyhouse();		/* Tells Sunsetter to play crazyhouse*/
 
-  void setLastMoveNow();		/* Used that when resaerching it doesn't think 
+  void setLastMoveNow();
+  double getLastMoveTime();	/* When the last move was played, in
+						  milliseconds */		/* Used that when resaerching it doesn't think 
 									it has used up all time */
 
   

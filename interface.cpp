@@ -726,11 +726,15 @@ void parseOption(const char *str)
 		
 		{	  	
 
-
+		
 #ifdef DEBUG_XBOARD
 		output ("//D: new or accept parsed, ignoring\n"); 
 #endif
+
+		partnerClockKnown = 0;   /* We don't know the partners
+					  clocks until it tells us */
 		}
+  
 
 
 
@@ -1042,7 +1046,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       {
       partner = 1;                 /* We should have gotten "partner" before,
 									but just to make sure */
-      if ((retval = parsePartnerCommand(arg[1], arg[2])) == -1) 
+      if ((retval = parsePartnerCommand(arg[1], arg[2], arg[3])) == -1) 
 
          {
          if ((strstr(arg[1], "Sorry") == NULL) && (strstr(arg[1], "OK,") == NULL))

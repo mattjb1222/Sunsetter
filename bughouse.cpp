@@ -298,10 +298,15 @@ int main(int argc, char **argv)
 		}
 #endif
 		if(!m.isBad() && gameInProgress && !forceMode && !analyzeMode)
+		{
 		gameBoard.playMove(m, 1);
 
-		} 
-	
+		/* Tell the partner our clocks, so it can decide when to sit
+		 * for a piece */
+		if (currentRules == BUGHOUSE) tellPartnerClock();
+		}
+		}
+		
 		// not pondering in Bug at all  
 		//
 		

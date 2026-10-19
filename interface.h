@@ -72,12 +72,26 @@ long getSysMilliSecs();
 
 
 
-int parsePartnerCommand(const char *arg1, const char *arg2);  
+int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3);  
 									/* Used when Sunsetters partner 
 									ptells it something */
 
 void givePartnerHelp(const char *str);     /* Gives help about the
 											commands Sunsetter understands
 											from it's partner */
+
+int canSitByClock();                  /* 1 if the clocks say we can sit
+								for a piece, 0 if we should keep
+								moving to catch up on time */
+
+void tellPartnerClock();             /* Tells the partner the clocks of
+								our board */
+
+extern int partnerTime;             /* The partners clock,
+							  1/100th seconds */
+extern int partOppTime;            /* The partners opponents clock,
+							  1/100th seconds */
+extern int partnerClockKnown;      /* 1 if the partner told us it's
+							  clocks */
 
 #endif

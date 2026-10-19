@@ -857,6 +857,20 @@ lastMoveTime = getSysMilliSecs();
 return;
 }
 
+/*
+ * Function: getLastMoveTime
+ * Input:    None
+ * Output:   When the last move was played, in milliseconds
+ * Purpose:  Used to read lastMoveTime, which is private, to see how
+ *           long a clock has been running
+ */
+
+double boardStruct::getLastMoveTime()
+
+{
+return lastMoveTime;
+}
+
 /* 
  * Function: copy
  * Input:    A pointer to the board to copy the board to.
