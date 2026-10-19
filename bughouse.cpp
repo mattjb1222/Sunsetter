@@ -313,6 +313,14 @@ int main(int argc, char **argv)
 		else if (currentRules == BUGHOUSE) 
 		{
 
+			/* We are mated soon: sit again as soon as we're up on time
+			 * (see findMove) */
+			if ((lastSearchScore <= -MATE) && (!sitting) && canSitByClock()) 
+			{
+				sit(); 
+				while (sitting) {pollForInput();} 
+			}
+
 			millisecondsPerMove = 10000;
 			if (gameBoard.timeToMove() && (!toldparttosit) && (!partsitting)) {toldparttosit =1; output ("tellics ptell sit (my opponent is waiting for something)\n"); }
 			millisecondsPerMove = 100000000;

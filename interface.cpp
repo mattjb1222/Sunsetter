@@ -1164,16 +1164,28 @@ void giveMove(move m)
  * Input:    None
  * Output:   long
  * Purpose:  Returns the system time in Milliseconds, independent from the OS.
+ *           Uses a monotonic wall-clock source, so it also counts up while
+ *           the process is idle (waiting for the opponent's move) - that is
+ *           what boardClock()/timeToMove() need in order to count the clock
+ *           down while Sunsetter is not thinking.
  */
 
 long getSysMilliSecs()
 {
-double tmp; 
+#ifdef _win32_
+   return (long)GetTickCount();
+#elif defined(__EMSCRIPTEN__)
+   double tmp; 
 
-tmp=clock();
-tmp*=1000; 
-return long((tmp / CLOCKS_PER_SEC)) ; 
+   tmp=clock();
+   tmp*=1000; 
+   return long((tmp / CLOCKS_PER_SEC)) ; 
+#else
+   struct timespec ts;
 
+   clock_gettime(CLOCK_MONOTONIC, &ts);
+   return (long)(ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL);
+#endif
 }
 
 

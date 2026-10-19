@@ -48,6 +48,8 @@ volatile int stopThinking;           /* If the search should be stopped */
 volatile int reSearch;               /* If the search should be restarted */
 volatile int forceMove;              /* Make a move, even if you get mated*/
 double millisecondsPerMove;             /* How many millisecs to take on a move */
+int lastSearchScore;                     /* Score of the last findMove() search,
+                                         from our perspective */
 int stats_positionsSearched;               /* # of search() done */
 int stats_quiescensePositionsSearched;     /* # of quieses() done */
 int stats_transpositionHits;               /* # of success for transposition lookups*/
@@ -1988,7 +1990,9 @@ void findMove(move *rightMove)
 
 
     searchRoot(MAX_SEARCH_DEPTH, rightMove, &bestValue);
-	
+
+	lastSearchScore = bestValue;
+
 	/* Only for Bughouse */
 	if (currentRules == BUGHOUSE) 
 	
@@ -2024,21 +2028,25 @@ void findMove(move *rightMove)
 	
 	// we told our part to sit, its the next move and now we are not mated anymore => he can go again 
 		
-	if (bestValue <= -MATE_IN_ONE+90) 
-	
+	/* We are mated soon (mate in 1 included): sit for a piece, but
+	 * only while we're up on time.  Sitting stops our clock while
+	 * the opponents clock keeps running, so while we're down on time
+	 * we keep moving to catch up instead (the main loop sits us
+	 * again as soon as we're up on time).  We never resign, we just
+	 * play out to the end */
+
+	if ((bestValue <= -MATE) && (!sitting) && canSitByClock()) 
+
 	{ 
-		if (!sitting) 
-					{ 
-					output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
-					sitting =1; 
-					while ((sitting) && (!reSearch)) {pollForInput();} 
-					} 
+		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
+		sitting =1; 
+		while ((sitting) && (!reSearch)) {pollForInput();} 
 	}
-	
-	// we are mated in 1 => sit 
+
+	// sit for a piece, see above
 
     else 
-	
+
 	{ 
 		
 		if ((bestValue <= -MATE) && (!partsitting)) 
@@ -2049,8 +2057,9 @@ void findMove(move *rightMove)
 					partsitting =1; toldparttosit =1; 
 					}  
 		}
-	
-	// we are mated soon, tell our partner to sit and then research, maybe it helps. Else just play.
+
+	/* mated soon and down on time: keep moving, but tell our partner
+	 * to sit and then research, maybe it helps. Else just play. */
     
 	} /* End of Only for Bughouse */ 
 

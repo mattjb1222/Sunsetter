@@ -99,6 +99,8 @@ extern int hashMoveCircle;
 
 extern int ratingDiff;							/* The rating difference */
 extern double millisecondsPerMove;                 /* How long to think */
+extern int lastSearchScore;                  /* Score of the last findMove()
+                                             search, from our perspective */
 extern int pondering;                           /* If we're pondering */
 extern int tryToPonder;                         /* If we should try to
                                                    ponder */

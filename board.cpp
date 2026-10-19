@@ -1817,7 +1817,7 @@ int boardStruct::outOfTime(color c)
       }
 
    currentTime = getSysMilliSecs(); 
-   usedTime = currentTime-lastMoveTime; 
+   usedTime = (currentTime-lastMoveTime)/10; // time in centiseconds
    
    if (c == WHITE && (usedTime  > whiteTime))
       {
