@@ -1071,6 +1071,22 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          }
     
       m = gameBoard.algebraicMoveToDBMove(arg[0]);
+
+      /* A drop arriving on our board (bughouse) is the partner's
+       * event, not one of our moves: our hand is empty in bughouse,
+       * so isLegal() would reject it, the board would fall out of
+       * sync with the server, and while sitting we would never get
+       * up (our clock runs to zero => "resign") */
+
+      if ((currentRules == BUGHOUSE) && !m.isBad() && (m.from() == IN_HAND)
+         && (gameBoard.pieceOnSquare(m.to()) == NONE))
+      {
+      gameBoard.applyPartnerDrop(m);
+      stopThought();
+      if (sitting) unsit(); /* the drop made our board playable */
+      return;
+      }
+
       if (!gameBoard.isLegal(m)) 
          {
          sprintf(buf, "Illegal move: %s\n", str);

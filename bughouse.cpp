@@ -313,12 +313,11 @@ int main(int argc, char **argv)
 		else if (currentRules == BUGHOUSE) 
 		{
 
-			/* We never sit voluntarily (see findMove): xboard has no
-			 * "sit" command, so the server keeps running our clock
-			 * while we wait for a piece and we'd just flag.  When
-			 * we're checkmated (no legal move) findMove sits us,
-			 * and the server auto-sits a checkmated player, so our
-			 * clock correctly stops then */
+			/* We never sit here (main loop): all sitting happens
+			 * inside findMove, where the search result decides it
+			 * (checkmated - always; mated soon - while up on time,
+			 * see findMove()).  Sitting here, before the search,
+			 * would bleed time without knowing we're mated */
 
 			millisecondsPerMove = 10000;
 			if (gameBoard.timeToMove() && (!toldparttosit) && (!partsitting)) {toldparttosit =1; output ("tellics ptell sit (my opponent is waiting for something)\n"); }

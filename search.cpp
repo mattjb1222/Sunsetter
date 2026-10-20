@@ -48,6 +48,9 @@ volatile int stopThinking;           /* If the search should be stopped */
 volatile int reSearch;               /* If the search should be restarted */
 volatile int forceMove;              /* Make a move, even if you get mated*/
 double millisecondsPerMove;             /* How many millisecs to take on a move */
+int    reSearchTimeBoost;              /* 1 if the next searchRoot (the
+                                        * skip-ghosts re-search) gets 4x the
+                                        * normal time budget */
 int lastSearchScore;                     /* Score of the last findMove() search,
                                          from our perspective */
 int stats_positionsSearched;               /* # of search() done */
@@ -295,6 +298,13 @@ void calcTimeToSpend()
 		if (mytime <= 4000) { millisecondsPerMove = 100; }
 		if (mytime <= 800) { millisecondsPerMove = 20; }
 	
+	}
+
+	if (reSearchTimeBoost)
+
+	{
+		millisecondsPerMove *= 4;
+		reSearchTimeBoost = 0;
 	}
 
 }
@@ -565,10 +575,10 @@ void searchRoot(int depth, move *rightMove, int *bestValue )
 	searchMoves[0][0].makeBad(); 
 	*rightMove = searchMoves[0][0];
 	/* In Bughouse a position with no legal move is a sit for a piece:
-	 * findMove() runs the sit protocol for us (bestValue stays
-	 * -INFINITY, which is <= -MATE).  We must not block here: no
-	 * piece drop can ever fix a check we cannot escape, so waiting
-	 * here would freeze us forever instead of sitting. */
+	 * findMove() runs the sit protocol for us (bestValue -INFINITY
+	 * is <= -MATE).  We must not block here: waiting here would
+	 * freeze us forever instead of sitting. */
+	*bestValue = -INFINITY; 
 	if (currentRules != BUGHOUSE) 
 	{
 	/* True checkmate (Crazyhouse): the game is over, wait for the
@@ -754,7 +764,11 @@ assert (n <= count); // this checks that the hash move we
       }
     } while(!done);
 
-  if (((*bestValue > MATE) || (*bestValue < -MATE) || (values[1] < -MATE_IN_ONE + 3)) && (!analyzeMode)) stopThought();
+  /* values[1] is only valid when there is more than one legal move;
+   * with a single move it is stale (it once held a -INFINITY from
+   * the skip-ghosts re-search, which killed that re-search after
+   * one ply and hid mate-in-1 positions) */
+  if (((*bestValue > MATE) || (*bestValue < -MATE) || ((count > 1) && (values[1] < -MATE_IN_ONE + 3))) && (!analyzeMode)) stopThought();
 
   // if we mate, are mated or have only 1 move to escape a short mate, then move now in zh.
 
@@ -1937,6 +1951,9 @@ void findMove(move *rightMove)
   int skipGhosts;   /* 1 if we must search without ghost pieces (the
                    * last search wanted a ghost drop, which we can't
                    * wait for) */
+  int toldPartGoThisTurn;   /* 1 if the partner told us to "go": this
+                           * turn makes one move even when mated (a
+                           * "go" lasts exactly one move) */
   
   char buf[MAX_STRING];
   char buf2[MAX_STRING];
@@ -2008,6 +2025,11 @@ void findMove(move *rightMove)
 	}
 	
 	stopThinking = reSearch = forceMove = 0;
+	/* if this is the skip-ghosts re-search, its time budget
+	 * starts right here (the first pass used its own up);
+	 * reSearchTimeBoost gives it 4x the normal amount */
+	if (skipGhosts) gameBoard.setLastMoveNow();
+    toldPartGoThisTurn = parttoldgo;
     parttoldgo = 0; // he tells us to go always for 1 move only
 	
 
@@ -2023,19 +2045,24 @@ void findMove(move *rightMove)
 
 	/* A bad rightMove is a no-legal-move position; the mated branch
 	 * below handles it (sit for a piece) */
-	/* We only win with a ghost piece, but we can't wait for it:
-	 * xboard has no "sit" command, so the server keeps running our
-	 * clock while we wait for the piece and we'd just flag.  If
-	 * rightMove is a ghost drop (illegal), search again without
-	 * ghosts and play the best real move.  Ghost pieces weren't
-	 * searched when canSitByClock() is false, so rightMove is
-	 * legal then */
+	/* If rightMove is a ghost drop (we're only ok because of a piece
+	 * our partner might drop for us), search again without ghosts to
+	 * get our true value and best real move.  Ghost pieces weren't
+	 * searched when canSitByClock() is false, so rightMove is legal
+	 * then.  The re-search gets its own time budget (the first pass
+	 * used it up); if that true value says we're mated, the mated
+	 * branch below sits and waits for the piece (we're up on time,
+	 * that's why the ghost was searched in the first place) */
 
 	if ((!rightMove->isBad()) && (!gameBoard.isLegal(*rightMove)))
 
 	{
 		skipGhosts = 1;
 		reSearch = 1;
+		/* the first pass used up its whole time budget; the
+		 * re-search gets a fresh, boosted one (see above)
+		 * so it can actually find mate if there is one */
+		reSearchTimeBoost = 1;
 	}
 
 	// the move is not legal => we tried to drop a ghost-piece => sit for it
@@ -2050,29 +2077,83 @@ void findMove(move *rightMove)
 	// we told our part to sit, its the next move and now we are not mated anymore => he can go again 
 		
 	/* We are mated soon (mate in 1 included).  With no legal move
-	 * left (checkmated, bad rightMove) we sit for a piece: that's
-	 * the only way to continue, and the server (e.g. Lichess)
-	 * auto-sits a checkmated player, so our clock correctly stops.
-	 * We never sit voluntarily while we still have a legal move:
-	 * xboard has no "sit" command, so the server keeps running our
-	 * clock while we wait for a piece and we'd just flag.  We never
-	 * resign, we just play out to the end */
+	 * left (checkmated, bad rightMove) we always sit for a piece:
+	 * that's the only way to continue, and the server (e.g.
+	 * Lichess) auto-sits a checkmated player, so our clock
+	 * correctly stops.  With legal moves left we sit too while
+	 * canSitByClock() returns 1 (we have a real lead on time -
+	 * at least 3s ahead and at least double their time, because a
+	 * voluntary sit bleeds our clock: the server stops it only for
+	 * a checkmated player, so the lead is our cushion): sitting
+	 * keeps material, and runs our opponent's clock down - that's
+	 * time our partner can win with.  When our partner told us
+	 * "go" (toldPartGoThisTurn) we make one move even though we
+	 * get mated: our captures feed the partner, and the opponent
+	 * might miss the mate.  We never resign, we just play out to
+	 * the end */
 
 	if ((bestValue <= -MATE) && (!sitting)
-	  && ((currentRules == BUGHOUSE) && rightMove->isBad())) 
+	  && ((currentRules == BUGHOUSE)
+	      && (rightMove->isBad() || (!toldPartGoThisTurn && canSitByClock())))) 
 
 	{ 
-		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
-		sitting =1; 
-		while ((sitting) && (!reSearch)) {pollForInput();} 
+	/* If the forced mate sequence costs us material (we lose more
+	 * piece value to the opponent's captures than we gain from
+	 * ours), say so: the partner decides when to "go" */
+	int losingMaterial = 0;
+
+	if (!rightMove->isBad()) 
+	{
+	int i, nMade = 0, usGain = 0, themGain = 0;
+	move m;
+
+	for (i = 0; (i < movesSearched) && (i < 32); i++) 
+	{
+		m = searchMoves[0][i];
+		if (m.isBad()) break;
+		{
+		piece vic = AIBoard.pieceOnSquare(m.to());
+		AIBoard.changeBoard(m);
+		nMade++;
+		if ((i % 2) == 0) 
+		{
+			if (m.from() == IN_HAND) usGain += pValue[m.moved()]; 
+			else if (vic != NONE) usGain += pValue[vic]; 
+		}
+		else 
+		{
+			if (m.from() == IN_HAND) themGain += pValue[m.moved()]; 
+			else if (vic != NONE) themGain += pValue[vic]; 
+		}
+		}
+	}
+	for (; nMade > 0; nMade--) AIBoard.unchangeBoard();
+	if (themGain > usGain) losingMaterial = 1;
 	}
 
-	// sit for a piece, see above
+	if (rightMove->isBad()) 
+	{
+		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
+		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
+	}
+	else if (losingMaterial) 
+	{
+		output ("tellics ptell sitting (I am dead soon, I will lose material, tell me \"go\" to make a few moves)\n"); 
+	}
+	else
+	{
+		output ("tellics ptell sitting (I am dead soon, tell me \"go\" to make a few moves)\n"); 
+	}
+	sitting =1; 
+	while ((sitting) && (!reSearch)) {pollForInput();} 
+	}
 
     else 
 
 	{ 
-		
+		/* Mated soon but keeping to move (behind on time, or the
+		 * partner told us to "go"): tell our partner to sit (so we
+		 * get pieces) and re-search, maybe it helps */
 		if ((bestValue <= -MATE) && (!partsitting)) 
 					{ 
 					reSearch =1; 
@@ -2082,9 +2163,9 @@ void findMove(move *rightMove)
 					}  
 		}
 
-	/* mated soon: keep moving (we can't sit voluntarily, see above),
-	 * but tell our partner to sit (so we get pieces) and then
-	 * research, maybe it helps. Else just play. */
+	/* (Mated soon but keeping to move: see the else above.  Otherwise
+	 * just play - a "go" turn makes the mate line, a behind-on-time
+	 * turn makes a real move to catch up on clock) */
     
 	} /* End of Only for Bughouse */ 
 

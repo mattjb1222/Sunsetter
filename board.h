@@ -500,6 +500,7 @@ struct boardStruct {
   void updateDiagonalBitboards(); /* Creates the diagonal bitboards when the others are already set, niklasf */
 
   int playMove(move m, int report);
+  void applyPartnerDrop(move m);  /* partner's drop on our board (bughouse) */
 								/* Plays a move. */
 
   int unplayMove();             /* Takes back the last move. */

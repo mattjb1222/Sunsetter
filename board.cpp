@@ -931,8 +931,11 @@ int boardStruct::playMove(move m, int report)
    
 	if (report == 1) giveMove(m);
 
-	if (gameBoard.isCheckmate() && (!analyzeMode))
+	if (gameBoard.isCheckmate() && (!analyzeMode) && (currentRules != BUGHOUSE))
 		{
+			/* Bughouse: a checkmated board is not the end of the
+			 * game; findMove() runs the sit protocol (sit for a
+			 * piece).  In Crazyhouse checkmate does end the game */
 			forceMode = 1; 
 			if (onMove == WHITE)
 				reportResult(BLACK_MATE);
@@ -952,6 +955,52 @@ assert ((hashMoveCircle >= 0) && (hashMoveCircle <= 7));
    
    return 0;
    }
+
+
+/*
+ * Function: applyPartnerDrop
+ * Input:    A drop move (from() == IN_HAND), the square must be empty
+ * Output:   None
+ * Purpose:  The partner drops a piece on our board (bughouse): the
+ *           piece simply appears - it was never in our hand (our
+ *           hand is empty in bughouse), and it doesn't change whose
+ *           turn it is on this board.  Can't go through changeBoard():
+ *           for a drop it would removePieceFromHand() (corrupting our
+ *           counts) and flip onMove.  Called when a drop arrives as an
+ *           incoming move, either directly ("move Q@e4") or relayed by
+ *           the wrapper ("tellics ptell Q@e4"); without it the board
+ *           would fall out of sync with the server and, while sitting,
+ *           we would never get up (our clock runs to zero => "resign").
+ */
+
+void boardStruct::applyPartnerDrop(move m)
+   {
+
+   memcpy(takeBackHistory[moveNum].oldCastle, canCastle, sizeof(takeBackHistory[moveNum].oldCastle));
+   memcpy(takeBackHistory[moveNum].attacks,attacks,  sizeof(takeBackHistory[moveNum].attacks));
+  
+   takeBackHistory[moveNum].oldep = enPassant;
+   takeBackHistory[moveNum].oldHash = hashValue;
+
+#ifdef DEBUG_HASH
+   takeBackHistory[moveNum].oldHashT = hashValueT; 
+#endif
+
+
+   moveAttackedSomething[moveNum+1] = addPiece(getDeepBugColor(), m.moved(), m.to(), 1, 1);
+
+   /* en passant is not possible after a drop move */
+
+   addEnPassantHash(enPassant);
+   addEnPassantHash(OFF_BOARD);
+   enPassant = OFF_BOARD;
+   moveHistory[moveNum] = m;
+   moveNum++;
+   }
+
+
+
+
 
 
 /*

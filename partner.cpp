@@ -113,17 +113,36 @@ static int boardClock(color c)
  *           If the opponent has sat for a long time, we assume he is
  *           trying to run out the clock and don't count on drops until
  *           we're up on time again (not even level, to avoid being
- *           overtaken).  Note: Sunsetter itself never *sits*
- *           voluntarily (it only sits when checkmated) because xboard
- *           has no "sit" command, so the server keeps running our clock
- *           while we sit.
+ *           overtaken).  Because voluntary sitting bleeds our clock
+ *           (the server stops it only for a checkmated player), "ahead"
+ *           means a real lead (>= 3s and >= double their time), not
+ *           just "not behind".  This also gates our voluntary sit:
+ *           when we're mated soon (mate in 1) but have legal moves
+ *           left, we sit while this returns 1 (we have a real lead on
+ *           time), make one move on a partner "go", and keep moving
+ *           otherwise (see findMove).
  */
 
 int canSitByClock()
    {
+   int ours, theirs;
+
+   ours = boardClock(gameBoard.getDeepBugColor());
+   theirs = boardClock(otherColor(gameBoard.getDeepBugColor()));
+
    /* We're behind on our board, keep moving to catch up on time */
-   if (boardClock(gameBoard.getDeepBugColor())
-       < boardClock(otherColor(gameBoard.getDeepBugColor())))
+   if (ours < theirs)
+      return 0;
+
+   /* Voluntary sitting bleeds our whole clock (the server only stops
+    * it for a checkmated player), so "not behind" is not enough:
+    * require a real lead - at least 3 full seconds ahead (a 3+0
+    * game can never satisfy that, so we never sit there - correct,
+    * a sit is never worth it on a 3 second clock) and at least
+    * double their time */
+   if ((ours - theirs) < 300)
+      return 0;
+   if (ours < (2 * theirs))
       return 0;
 
    /* The partner is moving and behind, keep moving to feed it pieces */
@@ -143,8 +162,7 @@ int canSitByClock()
     * are up on time again (so don't sit even level, to avoid being
     * overtaken) */
    if ((psittinglong >= 5)
-      && (boardClock(gameBoard.getDeepBugColor())
-          <= boardClock(otherColor(gameBoard.getDeepBugColor()))))
+      && (ours <= theirs))
       return 0;
 
    return 1;
@@ -195,13 +213,22 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
 
   toldMove = gameBoard.algebraicMoveToDBMove(arg1);
 
-  if(!toldMove.isBad()) doMove(toldMove);  
+  /* A drop on our board relayed by the wrapper is the partner's
+   * event, not one of our moves (our hand is empty in bughouse, so
+   * "playing" it would fail, and we'd never get up from sitting =>
+   * our clock runs to zero => "resign") */
+  if(!toldMove.isBad() && (currentRules == BUGHOUSE) && (toldMove.from() == IN_HAND)
+     && (gameBoard.pieceOnSquare(toldMove.to()) == NONE))
+  {
+  gameBoard.applyPartnerDrop(toldMove);
+  stopThought();
+  if (sitting) unsit(); /* the drop made our board playable */
+  }
+  else if(!toldMove.isBad()) doMove(toldMove);  
   else if(!strcasecmp(arg1, "sitting") || !strcasecmp(arg1, "frozen")) { partsitting = 1;  unsit();}
-  /* We never sit voluntarily, even when our partner asks: xboard
-   * has no "sit" command, so the server keeps running our clock
-   * while we sit and we'd just flag (we only sit when checkmated,
-   * see findMove).  We keep moving instead - our captures feed the
-   * partner anyway.  We deliberately say nothing, to avoid an
+  /* A partner request to sit never makes us sit: we sit based on
+   * our own position (mated soon, see findMove()), not on the
+   * partner's request.  We deliberately say nothing, to avoid an
    * endless sit - refuse - sit loop with other programs */
   else if(!strcasecmp(arg1, "sit")) { /* keep moving */ } 
   else if(!strcasecmp(arg1, "go")) { parttoldgo = 1; unsit(); stopThought(); } 
