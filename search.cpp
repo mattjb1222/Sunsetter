@@ -564,8 +564,18 @@ void searchRoot(int depth, move *rightMove, int *bestValue )
 	movesSearched = 0;
 	searchMoves[0][0].makeBad(); 
 	*rightMove = searchMoves[0][0];
+	/* In Bughouse a position with no legal move is a sit for a piece:
+	 * findMove() runs the sit protocol for us (bestValue stays
+	 * -INFINITY, which is <= -MATE).  We must not block here: no
+	 * piece drop can ever fix a check we cannot escape, so waiting
+	 * here would freeze us forever instead of sitting. */
+	if (currentRules != BUGHOUSE) 
+	{
+	/* True checkmate (Crazyhouse): the game is over, wait for the
+	 * next command */
 	output("  0 -32000       0        0  #-0   \n");
 	waitForInput();
+	}
 	return; 
   }
  
@@ -1924,6 +1934,10 @@ void findMove(move *rightMove)
 
   int bestValue; 
   
+  int skipGhosts;   /* 1 if we must search without ghost pieces (the
+                   * last search wanted a ghost drop, which we can't
+                   * wait for) */
+  
   char buf[MAX_STRING];
   char buf2[MAX_STRING];
 
@@ -1961,15 +1975,24 @@ void findMove(move *rightMove)
 		initialTime =  gameBoard.getTime(BLACK);
   }	
 
+  skipGhosts = 0;
+
   do {
 		gameBoard.copy(&AIBoard);
    		overideMove.makeBad();
 	
 
-	if ((currentRules == BUGHOUSE) && (!partsitting) && (!parttoldgo))
-	
-	
-	// we search with "ghost pieces" in Bughouse
+	/* We search with "ghost pieces" in Bughouse: pieces our
+	 * partner might drop for us.  Ghost pieces are only searched
+	 * while canSitByClock (we're up on time, and the board isn't
+	 * stalled): when we have to keep moving to catch up on time, a
+	 * win that only exists with a dropped piece is no good.  If
+	 * rightMove turns out to be a ghost drop, we search again
+	 * without ghosts (skipGhosts) and play the best real move, see
+	 * below */
+
+	if ((currentRules == BUGHOUSE) && (!partsitting) && (!parttoldgo)
+	   && (!skipGhosts) && canSitByClock())
 	
 	{
 
@@ -1998,24 +2021,22 @@ void findMove(move *rightMove)
 	
 	{
 
-	if ((!gameBoard.isLegal(*rightMove)) || ( (bestValue > MATE) && (bestValue < (MATE_IN_ONE - 90)) ))
-	
-	{ 		
-		if (!toldpartisit) 
-					{
-					DBMoveToRawAlgebraicMove(*rightMove, buf2); 
-					if (bestValue >MATE) {strcat(buf2," with mate"); }
-					sprintf(buf,"tellics ptell sitting (%s). Tell me \"sitting\" if no stuff comes for me or \"go\" to make one move .\n", buf2); 
-					output(buf); 
-					toldpartisit =1; 
-					}
-					waitForInput();
-					reSearch = 1; 
-					gameBoard.setLastMoveNow();
+	/* A bad rightMove is a no-legal-move position; the mated branch
+	 * below handles it (sit for a piece) */
+	/* We only win with a ghost piece, but we can't wait for it:
+	 * xboard has no "sit" command, so the server keeps running our
+	 * clock while we wait for the piece and we'd just flag.  If
+	 * rightMove is a ghost drop (illegal), search again without
+	 * ghosts and play the best real move.  Ghost pieces weren't
+	 * searched when canSitByClock() is false, so rightMove is
+	 * legal then */
 
-					
-	}				
+	if ((!rightMove->isBad()) && (!gameBoard.isLegal(*rightMove)))
 
+	{
+		skipGhosts = 1;
+		reSearch = 1;
+	}
 
 	// the move is not legal => we tried to drop a ghost-piece => sit for it
 	
@@ -2028,14 +2049,17 @@ void findMove(move *rightMove)
 	
 	// we told our part to sit, its the next move and now we are not mated anymore => he can go again 
 		
-	/* We are mated soon (mate in 1 included): sit for a piece, but
-	 * only while we're up on time.  Sitting stops our clock while
-	 * the opponents clock keeps running, so while we're down on time
-	 * we keep moving to catch up instead (the main loop sits us
-	 * again as soon as we're up on time).  We never resign, we just
-	 * play out to the end */
+	/* We are mated soon (mate in 1 included).  With no legal move
+	 * left (checkmated, bad rightMove) we sit for a piece: that's
+	 * the only way to continue, and the server (e.g. Lichess)
+	 * auto-sits a checkmated player, so our clock correctly stops.
+	 * We never sit voluntarily while we still have a legal move:
+	 * xboard has no "sit" command, so the server keeps running our
+	 * clock while we wait for a piece and we'd just flag.  We never
+	 * resign, we just play out to the end */
 
-	if ((bestValue <= -MATE) && (!sitting) && canSitByClock()) 
+	if ((bestValue <= -MATE) && (!sitting)
+	  && ((currentRules == BUGHOUSE) && rightMove->isBad())) 
 
 	{ 
 		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
@@ -2058,8 +2082,9 @@ void findMove(move *rightMove)
 					}  
 		}
 
-	/* mated soon and down on time: keep moving, but tell our partner
-	 * to sit and then research, maybe it helps. Else just play. */
+	/* mated soon: keep moving (we can't sit voluntarily, see above),
+	 * but tell our partner to sit (so we get pieces) and then
+	 * research, maybe it helps. Else just play. */
     
 	} /* End of Only for Bughouse */ 
 
@@ -2071,10 +2096,11 @@ void findMove(move *rightMove)
 
   {
 
-  if (partsitting && !toldparttosit) { psittinglong ++; if (psittinglong > 5) {output ("tellics ptell go (watch our time)\n"); psittinglong = 0; }}
-  else { psittinglong = 0; }
-
-  // our part is sitting on his own. If he does that for more than 5 moves I suggest to go 
+  /* Our part is sitting on his own.  If he does that for more than
+   * 5 moves I suggest to go (psittinglong keeps counting, so it
+   * stays >= 5 for the whole long sit; canSitByClock uses that) */
+  if (partsitting && !toldparttosit) { psittinglong ++; if ((psittinglong == 6) && !toldpartisit) output ("tellics ptell go (watch our time)\n"); }
+  else { psittinglong = 0; } 	
 	  
   if (toldpartisit) {unsit ();}
 

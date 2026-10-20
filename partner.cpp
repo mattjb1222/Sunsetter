@@ -99,14 +99,24 @@ static int boardClock(color c)
 /*
  * Function: canSitByClock
  * Input:    None
- * Output:   1 if the clocks say we can sit for a piece,
- *          0 if we should keep moving until we're up on time
- * Purpose:  Used to decide if Sunsetter should sit for a piece.  While
- *           sitting our clock stops while our opponents clock keeps
- *           running, so sitting while we're behind on time only widens
- *           the gap.  If the partner's board clocks are known and the
- *           partner is moving (not sitting), we also keep moving while
- *           the partner is behind, to feed it pieces.
+ * Output:   1 if we're "up on time" enough to count on pieces being
+ *          dropped for us (worth searching for ghost pieces),
+ *          0 if we have to keep moving to catch up on time
+ * Purpose:  A win that only exists with a dropped piece is only worth
+ *           searching for while we're up on time: when we're behind
+ *           on time we have to keep moving to catch up, and a ghost
+ *           win is no good then.  If the partner's board clocks are
+ *           known and the partner is moving (not sitting), we also keep
+ *           moving while the partner is behind, to feed it pieces.  If
+ *           the partner is sitting, his board is stalled (his opponent
+ *           isn't moving either), so only our moves feed him pieces.
+ *           If the opponent has sat for a long time, we assume he is
+ *           trying to run out the clock and don't count on drops until
+ *           we're up on time again (not even level, to avoid being
+ *           overtaken).  Note: Sunsetter itself never *sits*
+ *           voluntarily (it only sits when checkmated) because xboard
+ *           has no "sit" command, so the server keeps running our clock
+ *           while we sit.
  */
 
 int canSitByClock()
@@ -119,6 +129,22 @@ int canSitByClock()
    /* The partner is moving and behind, keep moving to feed it pieces */
    if (partnerClockKnown && !partsitting
       && (partnerTime < partOppTime))
+      return 0;
+
+   /* The partner is sitting, so his board is stalled (his opponent
+    * isn't moving either): only our moves feed him pieces, so
+    * keep moving */
+   if (partsitting)
+      return 0;
+
+   /* The opponent has been sitting for a long time (the partner board
+    * has sat for a while, so the opponent's clock is running): assume
+    * he is trying to run out the clock and win, keep moving until we
+    * are up on time again (so don't sit even level, to avoid being
+    * overtaken) */
+   if ((psittinglong >= 5)
+      && (boardClock(gameBoard.getDeepBugColor())
+          <= boardClock(otherColor(gameBoard.getDeepBugColor()))))
       return 0;
 
    return 1;
@@ -171,10 +197,13 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
 
   if(!toldMove.isBad()) doMove(toldMove);  
   else if(!strcasecmp(arg1, "sitting") || !strcasecmp(arg1, "frozen")) { partsitting = 1;  unsit();}
-  /* Only sit if our clocks say we're up on time, otherwise keep
-   * moving.  We deliberately say nothing if we refuse, to avoid an
+  /* We never sit voluntarily, even when our partner asks: xboard
+   * has no "sit" command, so the server keeps running our clock
+   * while we sit and we'd just flag (we only sit when checkmated,
+   * see findMove).  We keep moving instead - our captures feed the
+   * partner anyway.  We deliberately say nothing, to avoid an
    * endless sit - refuse - sit loop with other programs */
-  else if(!strcasecmp(arg1, "sit")) { if (canSitByClock()) sit(); } 
+  else if(!strcasecmp(arg1, "sit")) { /* keep moving */ } 
   else if(!strcasecmp(arg1, "go")) { parttoldgo = 1; unsit(); stopThought(); } 
   else if(!strcasecmp(arg1, "flag")) output("tellics flag\n");
   else if(!strcasecmp(arg1, "cancel")){ partsitting = 0;   sitting = 0; toldpartisit = 0; }
