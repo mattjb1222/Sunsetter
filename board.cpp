@@ -717,6 +717,12 @@ void boardStruct::setBoard(const char *fen, const char *turn, const char *castle
 	memset(takeBackHistory, 0, sizeof(takeBackHistory));
 	memset(moveHistory, 0, sizeof(moveHistory));
 
+	/*  Default the king squares so a FEN without kings can't leave the
+	      stale (and hash-affecting) values from the previous position. */
+
+	kingSquare[WHITE] = E1;
+	kingSquare[BLACK] = E8;
+
 	material = 0;
 	development = 0;
 
@@ -785,6 +791,13 @@ void boardStruct::setBoard(const char *fen, const char *turn, const char *castle
 			break;
 		if (*ch == '-')
 			break;
+
+		/*  Only piece symbols belong in the hand list.  Without this guard
+		      the trailing " w ..." of a bracket-less FEN would be parsed
+		      as pieces (KING, no less) and land in the hand.  */
+
+		if (!('A' <= *ch && *ch <= 'Z') && !('a' <= *ch && *ch <= 'z'))
+			continue;
 
 		addPieceToHand(symbolColor(*ch), symbolPiece(*ch), 0);
 	}
@@ -1250,6 +1263,12 @@ void boardStruct::bugChangeBoard(move m)
       {
       moveAttackedSomething[moveNum+1] = ~(removePiece(onMove, m.moved(), m.from(), 1, 1));
       moveAttackedSomething[moveNum+1] &= replacePiece(OFF_MOVE, takeBackHistory[moveNum].captured, onMove, m.moved(), m.to(), 1, 1);
+
+      /*  In bughouse, the captured piece goes to the capturer's hand.  
+          (bugUnchangeBoard() takes it back out, mirroring ZHChangeBoard().)  */
+
+      hand[onMove][takeBackHistory[moveNum].captured]++;
+      addToInHandHash(onMove, takeBackHistory[moveNum].captured);
       }
 
    /* If the move was a pawn promotion then:
@@ -1648,6 +1667,11 @@ void boardStruct::bugUnchangeBoard()
       {
       replacePiece(onMove, moveHistory[moveNum].moved(), OFF_MOVE, takeBackHistory[moveNum].captured, moveHistory[moveNum].to(), 0, 0);
       addPiece(onMove, moveHistory[moveNum].moved(), moveHistory[moveNum].from(), 0, 0);
+
+      /*  The captured piece goes back from the capturer's hand
+          (mirrors bugChangeBoard(); hash is restored from oldHash) */
+
+      hand[onMove][takeBackHistory[moveNum].captured]--;
       }
 
    /* Restore the saved information */
