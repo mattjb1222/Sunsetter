@@ -59,6 +59,11 @@ extern int firstBigValue;
 
 extern int gameInProgress;  /* If a game is going on */
 
+extern int justPlayedMove;  /* 1 right after we played our own move:
+                             * a late "go" must not then flip deepBug
+                             * to our opponent (see the "go" handler in
+                             * interface.cpp) */
+
 extern int soughtGame;      /* Have we already sought crazyhouse games */
 
 void ReadIniFile(char *filename); 

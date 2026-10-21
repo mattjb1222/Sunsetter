@@ -733,6 +733,11 @@ void parseOption(const char *str)
 
 		partnerClockKnown = 0;   /* We don't know the partners
 					  clocks until it tells us */
+		gameInProgress = 0;   /* Also the bughouse soft reset
+				    between games (icsdrone sends "new" instead
+				    of killing us): don't play anything until
+				    the next setboard re-arms us */
+		justPlayedMove = 0;
 		}
   
 
@@ -936,7 +941,18 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          {
          forceMode = 0;
 		 analyzeMode = 0; 
-		 gameBoard.setDeepBugColor(gameBoard.getColorOnMove());         
+		 /* A "go" that is only processed after we already played our
+		 * move (short search: pollForInput() during the search never
+		 * saw it) would flip deepBug to the color on the move - our
+		 * opponent - and make us play their move (the board then
+		 * falls out of sync with the server and we stall on the
+		 * clock).  justPlayedMove is 1 right after our own move;
+		 * the flip is only needed while we are still waiting for
+		 * the first turn, when it selects the color on the move
+		 * (e.g. after setboard, which leaves deepBug at BLACK) */
+		 if (!justPlayedMove)
+			gameBoard.setDeepBugColor(gameBoard.getColorOnMove());         
+		 justPlayedMove = 0;
 		 gameBoard.setLastMoveNow();
          startSearchOver();
          }
@@ -1017,6 +1033,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
 
 	   gameInProgress = 1;
 	   soughtGame = 0;
+	   justPlayedMove = 0;
 
 #ifndef NDEBUG
 	   gameBoard.showDebugInfo();
@@ -1027,15 +1044,18 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
 
    else if (!strcmp(arg[0], "holding")) 
       {
-      if (currentRules != CRAZYHOUSE) 
-         {  /* In crazyhouse we should already know
-                what is in each player's hand */
-		 
-		 strcpy(tmp, arg[1]);
-         strcat(tmp, arg[2]);
-         parseHolding(tmp);
-
-		}
+      /* Intentionally ignored for all rules: we track both hands
+       * exactly from captures (our hand = pieces we captured; the
+       * opponent's hand = pieces we lost, which we see on our
+       * board).  A "holding" report is redundant, and in bughouse
+       * it is actively dangerous: the server broadcasts holding
+       * lines for all its games and they carry no game id, so a
+       * report from another (e.g. an old, still running) game
+       * overwrites our hand with pieces we don't have - we then
+       * "find" and play drops that are illegal (the partner board
+       * rejects the move, both engines stall, we flag).  In
+       * crazyhouse we should already know what is in each player's
+       * hand, as before */
       }
    else if (!strcmp(arg[0], "."))
    {

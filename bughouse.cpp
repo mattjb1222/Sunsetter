@@ -115,6 +115,8 @@ int firstBigValue;
 
 int gameInProgress;
 
+int justPlayedMove;
+
 int soughtGame;
 
 rules currentRules;
@@ -300,6 +302,7 @@ int main(int argc, char **argv)
 		if(!m.isBad() && gameInProgress && !forceMode && !analyzeMode)
 		{
 		gameBoard.playMove(m, 1);
+		justPlayedMove = 1;
 
 		/* Tell the partner our clocks, so it can decide when to sit
 		 * for a piece */
