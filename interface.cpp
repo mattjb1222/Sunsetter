@@ -573,6 +573,26 @@ void parseHolding(const char *str)
  * Purpose:  Used to understand what the user is trying to say.
  */
 
+/* Count the P/N/B/R/Q pieces (case-insensitive) in a holding list
+ * such as "[QNN]" or "[]" (the brackets may be present or not).
+ * Kings are never held, so they need no case.  Used for the
+ * bughouse "holding" report (see parseOption). */
+static void parseHoldingList(char *list, int counts[PIECES])
+   {
+   char ch;
+   for (ch = *list; ch != '\0'; ch = *list++)
+      {
+      switch (ch)
+         {
+         case 'P': case 'p': counts[PAWN]++; break;
+         case 'N': case 'n': counts[KNIGHT]++; break;
+         case 'B': case 'b': counts[BISHOP]++; break;
+         case 'R': case 'r': counts[ROOK]++; break;
+         case 'Q': case 'q': counts[QUEEN]++; break;
+         }
+      }
+   }
+
 void parseOption(const char *str)
    {
 
@@ -1044,18 +1064,33 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
 
    else if (!strcmp(arg[0], "holding")) 
       {
-      /* Intentionally ignored for all rules: we track both hands
-       * exactly from captures (our hand = pieces we captured; the
-       * opponent's hand = pieces we lost, which we see on our
-       * board).  A "holding" report is redundant, and in bughouse
-       * it is actively dangerous: the server broadcasts holding
-       * lines for all its games and they carry no game id, so a
-       * report from another (e.g. an old, still running) game
-       * overwrites our hand with pieces we don't have - we then
-       * "find" and play drops that are illegal (the partner board
-       * rejects the move, both engines stall, we flag).  In
-       * crazyhouse we should already know what is in each player's
-       * hand, as before */
+      if (currentRules == BUGHOUSE && gameInProgress)
+         {
+         /* Bughouse (FICS/Thief contract): a captured piece goes to
+            the linked board's holding, not to either player's hand on
+            this board, so the "holding" report is the only source of
+            truth for what each player can drop (captures are not
+            added to the hands; see bugChangeBoard()).  icsdrone
+            remaps the FatICS per-board line before forwarding it:
+            arg[1] = the pieces this side (deepBug color) can drop,
+            arg[2] = the opponent's droppable pieces.  The server
+            sends a board's holding line only to that board's players,
+            so the line is always for our board.  (In crazyhouse the
+            report is still ignored, as before: we track both hands
+            exactly from captures, and a report from another game
+            would overwrite them. */
+         int ourColor = gameBoard.getDeepBugColor();
+         int otherColor = (ourColor == WHITE) ? BLACK : WHITE;
+         int counts1[PIECES], counts2[PIECES], p;
+         for (p = PAWN; p <= QUEEN; p++) { counts1[p] = 0; counts2[p] = 0; }
+         parseHoldingList(arg[1], counts1);
+         parseHoldingList(arg[2], counts2);
+         for (p = PAWN; p <= QUEEN; p++)
+            {
+            gameBoard.setPieceInHand(ourColor, p, counts1[p]);
+            gameBoard.setPieceInHand(otherColor, p, counts2[p]);
+            }
+         }
       }
    else if (!strcmp(arg[0], "."))
    {

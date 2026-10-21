@@ -1264,11 +1264,13 @@ void boardStruct::bugChangeBoard(move m)
       moveAttackedSomething[moveNum+1] = ~(removePiece(onMove, m.moved(), m.from(), 1, 1));
       moveAttackedSomething[moveNum+1] &= replacePiece(OFF_MOVE, takeBackHistory[moveNum].captured, onMove, m.moved(), m.to(), 1, 1);
 
-      /*  In bughouse, the captured piece goes to the capturer's hand.  
-          (bugUnchangeBoard() takes it back out, mirroring ZHChangeBoard().)  */
-
-      hand[onMove][takeBackHistory[moveNum].captured]++;
-      addToInHandHash(onMove, takeBackHistory[moveNum].captured);
+      /*  In bughouse (FICS/Thief contract) the captured piece goes
+          to the linked board's holding, NOT to either player's hand
+          on this board; what each player can drop comes from the
+          "holding" report (see interface.cpp).  So captures don't
+          touch the hands or the in-hand hash here.  (In
+          crazyhouse, ZHChangeBoard(), they go to the capturer's
+          hand.)  */
       }
 
    /* If the move was a pawn promotion then:
@@ -1668,10 +1670,8 @@ void boardStruct::bugUnchangeBoard()
       replacePiece(onMove, moveHistory[moveNum].moved(), OFF_MOVE, takeBackHistory[moveNum].captured, moveHistory[moveNum].to(), 0, 0);
       addPiece(onMove, moveHistory[moveNum].moved(), moveHistory[moveNum].from(), 0, 0);
 
-      /*  The captured piece goes back from the capturer's hand
-          (mirrors bugChangeBoard(); hash is restored from oldHash) */
-
-      hand[onMove][takeBackHistory[moveNum].captured]--;
+      /*  Bughouse: captures don't touch the hands (see
+          bugChangeBoard(); the hash is restored from oldHash) */
       }
 
    /* Restore the saved information */
