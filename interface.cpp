@@ -1106,13 +1106,18 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
                 + (arg[0][2] - '1') * ONE_RANK, dp);
       }
 
-      /* A drop arriving on our board (bughouse) is the partner's
-       * event, not one of our moves: our hand is empty in bughouse,
-       * so isLegal() would reject it, the board would fall out of
-       * sync with the server, and while sitting we would never get
-       * up (our clock runs to zero => "resign") */
+      /* A drop arriving on our board while it is *our* turn (bughouse)
+       * is the partner's event: only the partner drops on ours with
+       * our color.  An IN_HAND drop arriving while it is the *opponent's*
+       * turn is the opponent's drop (opponent's color) and must go
+       * through the normal isLegal()/playMove() path below, which
+       * applies it for the side to move.  Treating it as a partner drop
+       * added the piece in our color, after which the opponent's
+       * follow-up move with that piece was rejected as illegal and
+       * icsdrone resigned the game. */
 
       if ((currentRules == BUGHOUSE) && !m.isBad() && (m.from() == IN_HAND)
+         && (gameBoard.getColorOnMove() == gameBoard.getDeepBugColor())
          && (gameBoard.pieceOnSquare(m.to()) == NONE))
       {
       /* The partner sat for a piece: it lands on our board and the

@@ -285,10 +285,15 @@ void calcTimeToSpend()
 		if (opptime < mytime) mytime = opptime; // if opp is low on time, play fast too 
 												// he and my part may have sat 
 												// so maybe my part is low too 
-		millisecondsPerMove = ( initialTime / 360 ) + ( mytime / 360 ); 
-		if (mytime <= 20000) { millisecondsPerMove = mytime / 180; }
-		if (mytime <= 4000) { millisecondsPerMove = 40; }
-		if (mytime <= 800) { millisecondsPerMove = 5; }
+		/* The clock ticks every 2ms (1000 ticks = 2s of thinking).
+		 * Thinking a fixed fraction (1/18) of the *remaining* clock on
+		 * every move can never flag on a +0 clock (the clock decays
+		 * geometrically), and gives ~2s on a full 3-minute clock
+		 * (mytime/180 was ~200ms, which stopped the search at depth 1). */
+		millisecondsPerMove = mytime / 18;
+		if (millisecondsPerMove > 1500) millisecondsPerMove = 1500;
+		if (millisecondsPerMove < 300) millisecondsPerMove = 300;
+		if (mytime <= 900) { millisecondsPerMove = mytime / 6; }
 	}
 
 	else 
