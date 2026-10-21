@@ -1092,6 +1092,20 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
     
       m = gameBoard.algebraicMoveToDBMove(arg[0]);
 
+      /* A bughouse partner drop arrives with no from-square ("Qh8").
+       * algebraicMoveToDBMove() can only resolve moves that have a
+       * from-square, so an unresolvable piece+destination in bughouse
+       * is a drop: the opponent drops on their own board, only the
+       * partner drops on ours.  Kings are never dropped. */
+      if (m.isBad() && currentRules == BUGHOUSE && strlen(arg[0]) == 3)
+      {
+      int dp = charToPiece(arg[0][0]);
+      if (dp != NONE && dp != KING && arg[0][1] >= 'a' && arg[0][1] <= 'h'
+         && arg[0][2] >= '1' && arg[0][2] <= '8')
+         m = move(IN_HAND, (arg[0][1] - 'a') * ONE_FILE
+                + (arg[0][2] - '1') * ONE_RANK, dp);
+      }
+
       /* A drop arriving on our board (bughouse) is the partner's
        * event, not one of our moves: our hand is empty in bughouse,
        * so isLegal() would reject it, the board would fall out of
@@ -1101,9 +1115,16 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       if ((currentRules == BUGHOUSE) && !m.isBad() && (m.from() == IN_HAND)
          && (gameBoard.pieceOnSquare(m.to()) == NONE))
       {
+      /* The partner sat for a piece: it lands on our board and the
+       * turn passes to us (it was the partner's turn).  Apply it,
+       * hand the turn to us, and start thinking at once - we can't
+       * wait for a "go" that may never come. */
       gameBoard.applyPartnerDrop(m);
+      gameBoard.setColorOnMove(gameBoard.getDeepBugColor());
+      gameBoard.setDeepBugColor(gameBoard.getColorOnMove());
       stopThought();
       if (sitting) unsit(); /* the drop made our board playable */
+      startSearchOver();
       return;
       }
 
