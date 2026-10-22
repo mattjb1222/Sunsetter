@@ -43,7 +43,7 @@ void givePartnerHelp(const char *str)
 
   if(!strcasecmp(str, "intro")) {
     output("tellics ptell Hi.  Thanks for being my partner, I am Sunsetter.  Tell me \"help\" for the commands I understand, or \"help <command>\" for details on one.\n");
-    output("tellics ptell I understand these commands: sit, go, sitting (frozen), time, flag, abort, cancel, nevermind, x, help and piece directives (+P, -Q, +++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.\n");
+    output("tellics ptell I understand these commands: sit, go, sitting (frozen), time, flag, abort, cancel, nevermind, x, help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.\n");
   
   } else if(!strcasecmp(str, "sitting") || !strcasecmp(str, "frozen")) {
     output("tellics ptell \"sitting\" (or \"frozen\"): tells me you are sitting.  I note it (while you sit, only my moves can feed you pieces) and I get up from my own sit. \n");
@@ -60,13 +60,17 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "cancel")) {
     output("tellics ptell \"cancel\": like \"nevermind\"/\"x\" (see there): retract a pending \"sit\" and reset the piece directives to default.\n");
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
-    output("tellics ptell \"+P\" to \"++++P\" and \"-Q\" to \"----Q\" (one to four signs): try to take an enemy P / protect my Q, harder with more signs.  \"++\" to \"++++\" (one to four signs): trading is good; \"--\" to \"----\": trading is bad.  If a piece I'm protecting can't be saved I sit and tell you the X is coming - tell me \"go\" to make moves anyway.\n");
+    output("tellics ptell \"+P\" to \"++Q\" and \"-Q\" to \"--Q\": try to take an enemy P / protect my Q.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until \"cancel\"/\"nevermind\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.  If a piece I'm protecting can't be saved I sit and tell you the X is coming - tell me \"go\" to make moves anyway.\n");
+    output("tellics ptell After a \"+X\":  \"Mates Me\" = I protect the X to the max (sit before it must be given up, no placing an X on the board if none is there); \"Mates Him\" = I sacrifice material to take the X.\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
     output("tellics ptell \"nevermind\"/\"x\"/\"cancel\": retract a pending \"sit\" before I sat - I keep moving; also resets the piece directives to default (no piece is \"good\" or \"bad\" anymore).  It does not get me up (use \"go\" for that).\n");
+  } else if(!strcasecmp(str, "mates")) {
+    output("tellics ptell After a \"+X\":  \"Mates Me\" - I protect the X to the max: I sit before it must be given up, and I don't place an X on the board if none exists there.\n");
+    output("tellics ptell \"Mates Him\" - I sacrifice material to take the X.\n");
   } else if(!strcasecmp(str, "help")) {
     output("tellics ptell \"help\": the command list; \"help <command>\": details on that command, like this.\n");
   } else if(str[0] == '\0') {
-    output("tellics ptell I understand the following commands: sit, go, sitting (frozen), time, flag, abort, cancel, nevermind, x, help and piece directives (+P, -Q, +++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.  \"help <command>\" gives details.\n");
+    output("tellics ptell I understand the following commands: sit, go, sitting (frozen), time, flag, abort, cancel, nevermind, x, help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.  \"help <command>\" gives details.\n");
 
   } else {
     sprintf(buf, "tellics ptell Sorry, I don't have help on %s.  Tell me \"help\" for the command list.\n", str);
@@ -206,11 +210,7 @@ void tellPartnerClock()
 /* Function: parsePartnerDirective
  * Input:    A token from a partner ptell
  * Output:   1 if it's a piece directive
- * Purpose:  "+P".."++++Q" = try to take enemy piece type (1-4 signs =
- *           how hard), "-P".. = protect my piece type, "++"/"--"
- *           (1-4 signs) = trading is good/bad.  Consumed by
- *           findMove() (guard check / sit) and orderCaptures()
- *           (partTake/partTrade) */
+ * Purpose:  "+P".."++Q": try to take the enemy piece type, "-P"..: protect my piece type.  One sign is a one-time request (value 1: auto-reset when fulfilled - the piece was taken / the piece was lost); two or more signs stand (value 2: reset by nevermind/x/cancel; "+++Q" = "++Q", "----Q" = "--Q").  "++" to "++++" (one to four signs): trading is good; "--" to "----": trading is bad.  "Mates Me"/"Mates Him" (see parsePartnerCommand) strengthen a pending request to the max (partMatesMe/partMatesHim).  Consumed by findMove() (guard check / sit) and orderCaptures() (partTake/partTrade) */
 static int parsePartnerDirective(const char *tok)
 {
   int n = 0, p;
@@ -231,6 +231,8 @@ static int parsePartnerDirective(const char *tok)
   case 'Q': p = QUEEN; break;
   default: return 0;
   }
+  if (n > 2) n = 2;   /* one sign = one-time (1), two or more
+                       * signs = standing (2) */
   if (tok[0] == '+') partTake[p] = n;
   else partGuard[p] = n;
   return 1;
@@ -248,6 +250,18 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
 
   /* Piece directives may be one or more tokens ("ptell +Q --") */
   if((parsePartnerDirective(arg1)) || (parsePartnerDirective(arg2)) || (parsePartnerDirective(arg3))) return 1;
+
+  /* "Mates Me"/"Mates Him" after a piece request: strengthen that
+   * request to the max - "Mates Me": protect the piece to the max
+   * (sit before it must be given up; don't place it on the board
+   * if none exists there); "Mates Him": sacrifice material to take
+   * it.  Applies to every pending "+x". */
+  if (!strcasecmp(arg1, "mates"))
+  {
+  int di;
+  if (!strcasecmp(arg2, "me")) { for (di = PAWN; di <= QUEEN; di++) if (partTake[di]) { partTake[di] = 2; partMatesMe[di] = 1; } return 1; }
+  if (!strcasecmp(arg2, "him")) { for (di = PAWN; di <= QUEEN; di++) if (partTake[di]) { partTake[di] = 2; partMatesHim[di] = 1; } return 1; }
+  }
 
   if(!strcasecmp(arg1, "time")) {
     if (arg2[0] != '\0') { partnerTime = atoi(arg2); partOppTime = atoi(arg3); partnerClockKnown = 1; }
@@ -291,7 +305,7 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
    * anymore):  the partner's "cancel"/"nevermind"/"x".  These do NOT
    * get us up from sitting (a "go" does) and leave the sit
    * bookkeeping (partsitting, toldpartisit) alone. */
-  else if(!strcasecmp(arg1, "cancel") || !strcasecmp(arg1, "nevermind") || !strcasecmp(arg1, "x")) { parttoldsit = 0; { int di; for (di = 1; di <= 5; di++) partTake[di] = partGuard[di] = 0; } partTrade = 0; return 1; }
+  else if(!strcasecmp(arg1, "cancel") || !strcasecmp(arg1, "nevermind") || !strcasecmp(arg1, "x")) { parttoldsit = 0; { int di; for (di = 1; di <= 5; di++) partTake[di] = partGuard[di] = partMatesMe[di] = partMatesHim[di] = 0; } partTrade = 0; return 1; }
   else if(!strcasecmp(arg1, "abort")) output("tellics abort\n");
   else if(!strcasecmp(arg1, "hi") || !strcasecmp(arg1, "hello") ||
 	  !strcasecmp(arg1, "hiya") || !strcasecmp(arg1, "hi!")) { output("tellics ptell hi!\n");

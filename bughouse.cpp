@@ -82,6 +82,8 @@ int parttoldsit;
 int partTake[7];
 int partGuard[7];
 int partTrade;
+int partMatesMe[7];
+int partMatesHim[7];
 int partsitting;
 int psittinglong; 
 
@@ -305,6 +307,11 @@ int main(int argc, char **argv)
 #endif
 		if(!m.isBad() && gameInProgress && !forceMode && !analyzeMode)
 		{
+		/* Partner "+x" directive: a one-time request (1 sign) is
+		 * fulfilled when we take an enemy piece of that type -
+		 * reset that specific request */
+		{ piece vc = gameBoard.pieceOnSquare(m.to());
+		if ((vc != NONE) && (partTake[vc] == 1)) partTake[vc] = 0; }
 		gameBoard.playMove(m, 1);
 		justPlayedMove = 1;
 

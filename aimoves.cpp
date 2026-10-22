@@ -370,9 +370,11 @@ int boardStruct::aiMoves(move *m)
 
 
     /* Get the dropping moves, the from square in IN_HAND the to square
-      is any unoccupied square (except for the 1st, 8th rank for pawns). */
+      is any unoccupied square (except for the 1st, 8th rank for pawns).
+      "Mates Me": a piece of type x is not placed on the board if no
+      x exists there (the hand piece stays out of harm's way) */
 
-   if (hand[onMove][PAWN]) 
+   if ((hand[onMove][PAWN]) && ((partMatesMe[PAWN]) ? havePieceOf(onMove, PAWN) : 1)) 
       {
       trythose = generateToFirst[PAWN][onMove][1] & unoccupied;
 	  dest = trythose & ~(FIRST_RANK | EIGHTH_RANK);
@@ -381,7 +383,7 @@ int boardStruct::aiMoves(move *m)
 
    for (p = ROOK; p <= LAST_PIECE; p = (piece) (p + 1)) 
       {
-      if (hand[onMove][p]) 
+      if ((hand[onMove][p]) && ((partMatesMe[p]) ? havePieceOf(onMove, p) : 1)) 
          {
 		 trythose = generateToFirst[p][onMove][1] & unoccupied;
          fillMoveArray(&m, IN_HAND, p, trythose);
@@ -498,9 +500,11 @@ int boardStruct::aiMoves(move *m)
 
 
     // Get the dropping moves, the from square in IN_HAND the to square
-    //  is any unoccupied square (except for the 1st, 8th rank for pawns). 
+    //  is any unoccupied square (except for the 1st, 8th rank for
+    //  pawns).  "Mates Me": see the block above - a piece of type x
+    //  is not placed on the board if no x exists there.
 
-   if (hand[onMove][PAWN]) 
+   if ((hand[onMove][PAWN]) && ((partMatesMe[PAWN]) ? havePieceOf(onMove, PAWN) : 1)) 
       {
 	  trythose = ~generateToFirst[PAWN][onMove][1] & unoccupied;
       dest = trythose & ~(FIRST_RANK | EIGHTH_RANK);
@@ -509,7 +513,7 @@ int boardStruct::aiMoves(move *m)
 
    for (p = ROOK; p <= LAST_PIECE; p = (piece) (p + 1)) 
       {
-      if (hand[onMove][p]) 
+      if ((hand[onMove][p]) && ((partMatesMe[p]) ? havePieceOf(onMove, p) : 1)) 
          {
 		 trythose = ~generateToFirst[p][onMove][1] & unoccupied;
          fillMoveArray(&m, IN_HAND, p, trythose);

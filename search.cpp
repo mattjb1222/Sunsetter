@@ -709,6 +709,14 @@ assert (n <= count); // this checks that the hash move we
 	  
 	  value = searchFirstMove(searchMoves[0][0], FractionalDeep[currentDepth], *bestValue);
 
+	  /* Partner "Mates Him": sacrifice any material to take the
+	   * requested piece - a hard push on the ROOT selection (the
+	   * capture is already ordered first by orderCaptures' bonus
+	   * and guaranteed to be searched; without this the eval would
+	   * still prefer a quiet move over a costly take) */
+	  { piece vc = AIBoard.pieceOnSquare(searchMoves[0][0].to());
+	  if ((vc != NONE) && (partMatesHim[vc])) value += 2000; }
+
 	
 
 #ifdef GAMETREE
@@ -754,8 +762,12 @@ assert (n <= count); // this checks that the hash move we
   {	
 	  movesSearched++;
 	  
-	  value =  searchMove(searchMoves[0][movesSearched], FractionalDeep[currentDepth], *bestValue );	 	  
-	
+	  value =  searchMove(searchMoves[0][movesSearched], FractionalDeep[currentDepth], *bestValue );  	  
+
+	  /* Partner "Mates Him": see searchFirstMove above - hard push
+	   * on the root selection of a take of the requested piece */
+	  { piece vc = AIBoard.pieceOnSquare(searchMoves[0][movesSearched].to());
+	  if ((vc != NONE) && (partMatesHim[vc])) value += 2000; }	
       values[movesSearched] = value;
 
 	  // we are out of time, and are not failing high  
@@ -2104,7 +2116,8 @@ void findMove(move *rightMove)
     parttoldgo = 0; // he tells us to go always for 1 move only
 
 
-	/* Partner "-X" directive (protect my X, partGuard):  if every legal
+	/* Partner "-X" directive (protect my X, partGuard) and "Mates Me"
+	 * (partMatesMe: protect the X to the max):  if every legal
 	 * move leaves one of our X pieces under-attacked we can't save it -
 	 * the piece is coming (opponent takes it, or drops one on it).  We
 	 * sit for a piece and tell the partner, who can "go" to make us move
@@ -2112,7 +2125,9 @@ void findMove(move *rightMove)
 	 * us wakes us (startSearchOver).  Runs before searchRoot so we don't
 	 * spend a full search on a position we sit on;  also fills
 	 * rootGuardPend for searchRoot() to order the root moves by
-	 * (protect X first). */
+	 * (protect X first).  One-time (1 sign) resets in the main loop
+	 * / when the piece is lost; standing (2 signs) re-triggers until
+	 * nevermind/x/cancel. */
 
 	int guardSkipSearch = 0;
 
@@ -2125,7 +2140,7 @@ void findMove(move *rightMove)
 	partGuardOrder = 0;
 	for (gtype = PAWN; (gtype <= QUEEN) && (!sitting); gtype++)
 	{
-	if (partGuard[gtype] && AIBoard.havePieceOf(us, gtype))
+	if ((partGuard[gtype]) || (partMatesMe[gtype])) if (AIBoard.havePieceOf(us, gtype))
 	{
 	int unsavable;
 
@@ -2137,7 +2152,8 @@ void findMove(move *rightMove)
 	pn[0] = "PRNBQ"[pn2]; pn[1] = '\0';
 	output ("tellics ptell sitting (the ");
 	output (pn);
-	output (" is coming, tell me \"go\" to make moves)\n");
+	if (partMatesMe[gtype]) output (" is about to be taken, tell me \"go\" to make moves)\n");
+	else output (" is coming, tell me \"go\" to make moves)\n");
 	sitting = 1;
 	while ((sitting) && (!reSearch)) pollForInput();
 	guardSkipSearch = 1;   /* the wait ended ("go" or a drop): don't run

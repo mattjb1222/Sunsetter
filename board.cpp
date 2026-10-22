@@ -642,7 +642,7 @@ void boardStruct::resetBoard()
    
    /* Bughouse Garbage */
    psittinglong =  partsitting = toldpartisit = toldparttosit= parttoldgo = parttoldsit = 0; 
-   { int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = 0; partTrade = 0; }
+   { int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = partMatesMe[di] = partMatesHim[di] = 0; partTrade = 0; }
    
    /* For the stats */
    stats_overallsearches = stats_overallqsearches = stats_overallticks = 0; 
@@ -745,7 +745,7 @@ void boardStruct::setBoard(const char *fen, const char *turn, const char *castle
 	// Reset
 	initializeHistory();
 	psittinglong = partsitting = toldpartisit = toldparttosit = parttoldgo = parttoldsit = 0;
-	{ int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = 0; partTrade = 0; }
+	{ int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = partMatesMe[di] = partMatesHim[di] = 0; partTrade = 0; }
 	stats_overallsearches = stats_overallqsearches = stats_overallticks = 0;
 	firstBigValue = 0;
 	moveNum = 1;

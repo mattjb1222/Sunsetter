@@ -222,10 +222,15 @@ move *boardStruct::orderCaptures(move *m)
 			 * directive bonus, drives the sort and the profitable cutoff) */
 		   baseVal[count] = captureGain(onMove, m[count]);
 		   values[count] = baseVal[count];
-		   /* partner directives: "+Q" = try to take the enemy queen (up to
-			 * 4 signs = how hard);  "++"/"--" = trading is good/bad, a
-			 * "trade" is capturing equal value */
-		   if (partTake[position[m[count].to()]]) values[count] += partTake[position[m[count].to()]] * 400;
+		   /* partner directives: "+Q" = try to take the enemy queen
+			 * (one sign = one-time, two signs = standing);  "Mates Him"
+			 * = sacrifice any material to take it (the +2000 is a
+			 * hard push past any material difference); "++"/"--"
+			 * (partTrade) = trading is good/bad, a "trade" is
+			 * capturing equal value */
+		   if (partTake[position[m[count].to()]])
+			   values[count] += partTake[position[m[count].to()]] * 400
+			                  + (partMatesHim[position[m[count].to()]] ? 2000 : 0);
 		   if ((partTrade != 0) && (pValue[m[count].moved()] == pValue[position[m[count].to()]]))
 			values[count] += partTrade * 300;
 	   }

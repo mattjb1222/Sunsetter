@@ -31,9 +31,11 @@ extern int toldpartisit;	/* If we decided to sit on our own */
 extern int toldparttosit;
 extern int parttoldgo;
 extern int parttoldsit; 	 /* If partner told us to sit (obeyed in findMove) */
-extern int partTake[7];  	 /* If partner wants us to take enemy piece type (1-5), 1-4 = how hard (signs) */
-extern int partGuard[7]; 	 /* If partner wants us to protect own piece type (1-5), 1-4 */
+extern int partTake[7];  	 /* If partner wants us to take enemy piece type (1-5): 1 sign = one-time request (auto-reset when fulfilled), 2 signs = standing (reset by nevermind/x/cancel) */
+extern int partGuard[7]; 	 /* If partner wants us to protect own piece type (1-5): 1 sign = one-time (auto-reset when the piece is lost), 2 signs = standing */
 extern int partTrade;  	 /* +1..+4 = trading is good, -1..-4 = trading is bad */
+extern int partMatesMe[7];  /* "Mates Me" after a "+x": protect the x to the max - sit before it must be given up; don't place an x on the board if none exists there */
+extern int partMatesHim[7]; /* "Mates Him" after a "+x": sacrifice any material to take the x */
 extern int partsitting;      /* If it told partner to sit  */
 extern int psittinglong; 	 /* for how long our part has been sitting on his own */
 

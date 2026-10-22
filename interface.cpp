@@ -1193,7 +1193,13 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       if ((gameBoard.getColorOnMove() == gameBoard.getDeepBugColor()) 
             && !forceMode && !analyzeMode)
 			output("It is not your move");
-	     
+	   
+	  /* Partner "-x" directive: a one-time guard (1 sign) is over
+	   * once the opponent captures one of our pieces of that type
+	   * - reset that specific request (the piece is gone, nothing
+	   * left to guard). */
+	  { piece vc = gameBoard.pieceOnSquare(m.to());
+	  if ((vc != NONE) && (partGuard[vc] == 1)) partGuard[vc] = 0; }
 	  if (gameBoard.playMove(m,0)) 
          {
          sprintf(buf, "Tried to play illegal move: %s\n", str);
