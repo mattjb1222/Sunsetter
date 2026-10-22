@@ -51,6 +51,11 @@ double millisecondsPerMove;             /* How many millisecs to take on a move 
 int    reSearchTimeBoost;              /* 1 if the next searchRoot (the
                                         * skip-ghosts re-search) gets 4x the
                                         * normal time budget */
+int partGuardOrder;                 /* 1 if findMove wants searchRoot to order
+                                     * the root moves by the partGuard penalty
+                                     * (rootGuardPend, filled by guardRootCheck) */
+static int rootGuardPend[MAX_MOVES];   /* Under-attacked flag per root move,
+                                        * filled by guardRootCheck() */
 int lastSearchScore;                     /* Score of the last findMove() search,
                                          from our perspective */
 int stats_positionsSearched;               /* # of search() done */
@@ -592,6 +597,34 @@ void searchRoot(int depth, move *rightMove, int *bestValue )
 	waitForInput();
 	}
 	return; 
+  }
+ 
+  /* Partner "-X" directive: findMove() ran guardRootCheck() over exactly
+   * these moves (same AIBoard state, same generation);  reorder the root
+   * moves so the ones that leave a guarded piece under-attacked go last.
+   * Stable sort: the engine's own ordering is kept within a penalty tier */
+  if (partGuardOrder)
+  {
+  int pend[MAX_MOVES];
+  int i2, j2;
+
+  for (i2 = 0; i2 < count; i2++) pend[i2] = rootGuardPend[i2];
+  for (j2 = 1; j2 < count; j2++)
+  {
+  int cp = pend[j2];
+  move cur = searchMoves[0][j2];
+
+  i2 = j2 - 1;
+  while ((i2 >= 0) && (pend[i2] > cp))
+  {
+  searchMoves[0][i2 + 1] = searchMoves[0][i2];
+  pend[i2 + 1] = pend[i2];
+  i2--;
+  }
+  searchMoves[0][i2 + 1] = cur;
+  pend[i2 + 1] = cp;
+  }
+  partGuardOrder = 0;
   }
  
   if((te = AIBoard.lookup()) != NULL) { // We've searched this position before
@@ -1942,6 +1975,39 @@ assert ( stats_positionsSearched < 1000000000 );  // hoping for the day when
 }
 
 
+/* Function: guardRootCheck
+ * Input:    The search board, our color, the guarded piece type
+ * Output:   1 if no move saves the piece
+ * Purpose:  Partner "-X" directive (protect my X).  Runs through every
+ *           legal root move and records, for each one, whether at least
+ *           one of our X pieces is left under-attacked (attacker >
+ *           defender, boardStruct::attacks[]) after it; 1 is recorded in
+ *           rootGuardPend[i] (searchRoot() sorts the root moves by it,
+ *           so protective moves come first).  Returns 1 if EVERY move
+ *           leaves an X hanging: we can't save it, the piece is coming
+ *           (the opponent takes it, or drops one on it) - findMove() sits
+ *           and tells the partner. */
+
+static int guardRootCheck(boardStruct *b, color us, piece type)
+{
+  move mv[MAX_MOVES];
+  int n, i, unsavable;
+
+  n = b->moves(mv);
+  if (n == 0) return 0;   /* no legal move: the mated-sit branch handles it */
+
+  for (i = 0; i < n; i++)
+  {
+    b->changeBoard(mv[i]);
+    rootGuardPend[i] = b->guardPieceHang(us, type);
+    b->unchangeBoard();
+  }
+
+  unsavable = 1;
+  for (i = 0; i < n; i++) if (!rootGuardPend[i]) { unsavable = 0; break; }
+  return unsavable;
+}
+
 /* Function: findMove
  * Input:    A pointer to move
  * Output:   None
@@ -2036,16 +2102,61 @@ void findMove(move *rightMove)
 	if (skipGhosts) gameBoard.setLastMoveNow();
     toldPartGoThisTurn = parttoldgo;
     parttoldgo = 0; // he tells us to go always for 1 move only
-	
 
 
-    searchRoot(MAX_SEARCH_DEPTH, rightMove, &bestValue);
+	/* Partner "-X" directive (protect my X, partGuard):  if every legal
+	 * move leaves one of our X pieces under-attacked we can't save it -
+	 * the piece is coming (opponent takes it, or drops one on it).  We
+	 * sit for a piece and tell the partner, who can "go" to make us move
+	 * anyway (the do-while re-runs with toldPartGoThisTurn) or a drop for
+	 * us wakes us (startSearchOver).  Runs before searchRoot so we don't
+	 * spend a full search on a position we sit on;  also fills
+	 * rootGuardPend for searchRoot() to order the root moves by
+	 * (protect X first). */
 
-	lastSearchScore = bestValue;
+	int guardSkipSearch = 0;
+
+	if ((currentRules == BUGHOUSE) && (!sitting) && (!toldPartGoThisTurn))
+	{
+	color us = AIBoard.getColorOnMove();
+	piece gtype;
+	char pn[2];
+
+	partGuardOrder = 0;
+	for (gtype = PAWN; (gtype <= QUEEN) && (!sitting); gtype++)
+	{
+	if (partGuard[gtype] && AIBoard.havePieceOf(us, gtype))
+	{
+	int unsavable;
+
+	partGuardOrder = 1;
+	unsavable = guardRootCheck(&AIBoard, us, gtype);
+	if (unsavable)
+	{
+	int pn2 = gtype - PAWN;
+	pn[0] = "PRNBQ"[pn2]; pn[1] = '\0';
+	output ("tellics ptell sitting (the ");
+	output (pn);
+	output (" is coming, tell me \"go\" to make moves)\n");
+	sitting = 1;
+	while ((sitting) && (!reSearch)) pollForInput();
+	guardSkipSearch = 1;   /* the wait ended ("go" or a drop): don't run
+	                         * this searchRoot, re-run the do-while - it
+	                         * re-consumes parttoldgo / the new position */
+	reSearch = 1;
+	partGuardOrder = 0;   /* rootGuardPend is for the old position */
+	}
+	}
+	}
+	}
+
+    if (!guardSkipSearch) searchRoot(MAX_SEARCH_DEPTH, rightMove, &bestValue);
+
+	if (!guardSkipSearch) lastSearchScore = bestValue;
 
 	/* Only for Bughouse */
-	if (currentRules == BUGHOUSE) 
-	
+	if ((currentRules == BUGHOUSE) && (!guardSkipSearch)) 
+		
 	{
 
 	/* A bad rightMove is a no-legal-move position; the mated branch

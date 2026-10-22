@@ -201,6 +201,41 @@ bitboard boardStruct::uncoverAttacks(color c, square where)
    }
 
 
+/*
+ * Function: havePieceOf
+ * Input:    A color and a piece
+ * Output:   1 if `c` has piece `p` on the board
+ * Purpose:  Primitive to access the piece bitboards (partner directive) */
+
+int boardStruct::havePieceOf(color c, piece p)
+   {
+   return (((pieces[p] & occupied[c]).data != 0));
+   }
+
+
+/*
+ * Function: guardPieceHang
+ * Input:    Our color and a piece type
+ * Output:   1 if one of our `type` pieces is under-attacked
+ * Purpose:  Partner "-X" directive: 1 if an attacker would take one of our
+ *           `type` pieces for less (attacker > defender, attacks[][]), i.e.
+ *           the piece can't be saved in the current position */
+
+int boardStruct::guardPieceHang(color us, piece type)
+   {
+   bitboard bb = pieces[type] & occupied[us];
+   int sq;
+
+   while (bb.data)
+   {
+      sq = firstSquare(bb.data);
+      bb.unsetSquare(sq);
+      if (attacks[otherColor(us)][sq] > attacks[us][sq]) return 1;
+      }
+   return 0;
+   }
+
+
 /* 
  * Function: movePiece
  * Input:    A color and a piece to move and what square it should be moved 
@@ -607,6 +642,7 @@ void boardStruct::resetBoard()
    
    /* Bughouse Garbage */
    psittinglong =  partsitting = toldpartisit = toldparttosit= parttoldgo = parttoldsit = 0; 
+   { int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = 0; partTrade = 0; }
    
    /* For the stats */
    stats_overallsearches = stats_overallqsearches = stats_overallticks = 0; 
@@ -709,6 +745,7 @@ void boardStruct::setBoard(const char *fen, const char *turn, const char *castle
 	// Reset
 	initializeHistory();
 	psittinglong = partsitting = toldpartisit = toldparttosit = parttoldgo = parttoldsit = 0;
+	{ int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = 0; partTrade = 0; }
 	stats_overallsearches = stats_overallqsearches = stats_overallticks = 0;
 	firstBigValue = 0;
 	moveNum = 1;

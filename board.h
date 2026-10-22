@@ -549,6 +549,9 @@ struct boardStruct {
   color getColorOffMove();
   square getEnPassantSquare();
   piece pieceOnSquare(square sq);
+  int havePieceOf(color c, piece p);  /* 1 if `c` has piece `p` on the board */
+  int guardPieceHang(color us, piece type); /* 1 if a `us` `type` piece is
+                                            * under-attacked (attacker > defender) */
   bool isPieceOnSquare(square sq, piece p, color c);   //niklasf for setboard
 
 

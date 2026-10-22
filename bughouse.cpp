@@ -79,6 +79,9 @@ int toldpartisit;
 int toldparttosit;
 int parttoldgo; 
 int parttoldsit; 
+int partTake[7];
+int partGuard[7];
+int partTrade;
 int partsitting;
 int psittinglong; 
 

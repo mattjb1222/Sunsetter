@@ -211,21 +211,31 @@ return;
 move *boardStruct::orderCaptures(move *m)
    {
    move tmpMove;
-   int values[MAX_MOVES], done, count, tmpVal, i;
-   values[0] = 0; // needed for the case of 0 capture moves
+   int values[MAX_MOVES], baseVal[MAX_MOVES], bestGain, done, count, tmpVal, i;
+   values[0] = baseVal[0] = 0; // needed for the case of 0 capture moves
 
    for (count = 0; !m[count].isBad(); count++)
       {
        if ( position[m[count].to()] != NONE )
 	   {
-		   values[count] =  captureGain(onMove, m[count]);
+		   /* baseVal (drives bestCaptureGain) vs values (with the partner
+			 * directive bonus, drives the sort and the profitable cutoff) */
+		   baseVal[count] = captureGain(onMove, m[count]);
+		   values[count] = baseVal[count];
+		   /* partner directives: "+Q" = try to take the enemy queen (up to
+			 * 4 signs = how hard);  "++"/"--" = trading is good/bad, a
+			 * "trade" is capturing equal value */
+		   if (partTake[position[m[count].to()]]) values[count] += partTake[position[m[count].to()]] * 400;
+		   if ((partTrade != 0) && (pValue[m[count].moved()] == pValue[position[m[count].to()]]))
+			values[count] += partTrade * 300;
 	   }
 	   else 
 	   {
 		  // either a promotion, or an e.p. capture 
 		   // this estimation will do 
 		   // TODO FIX this
-		   values[count] = pValue[KNIGHT];
+		   baseVal[count] = pValue[KNIGHT];
+		   values[count] = baseVal[count];
 	   }
       }
 
@@ -239,7 +249,7 @@ move *boardStruct::orderCaptures(move *m)
 	   // (R should be called minor in crazyhouse) is not considered 
 	   // a winning capture. 
 
-     bestCaptureGain[moveNum] = max (0, values[0]);
+     bestCaptureGain[moveNum] = max (0, baseVal[0]);
 	   
 	 if (values[0] < +20) return m;
 	 else return m + count;
@@ -264,7 +274,9 @@ move *boardStruct::orderCaptures(move *m)
             }
       } while(!done);
 
-   bestCaptureGain[moveNum] = max (0, values[0]);
+   bestGain = 0;
+   for (i = 0; i < count; i++) if (baseVal[i] > bestGain) bestGain = baseVal[i];
+   bestCaptureGain[moveNum] = bestGain;
 
    if (values[0] < +20)
       return m;
