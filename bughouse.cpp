@@ -298,7 +298,7 @@ int main(int argc, char **argv)
 		{
 			/* tell the partner what pieces I want / should withhold
 			 * (ptell "++x"/"--x" + "Mates Him"/"Mates Me"; quiet while
-			 * the state is unchanged, retracts with "x") */
+			 * the state is unchanged, retracts with "nevermind") */
 			tellPartnerDirectives();
 
 #ifdef __EMSCRIPTEN__

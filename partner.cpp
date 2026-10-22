@@ -62,7 +62,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
     output("tellics ptell \"+P\" to \"++Q\" and \"-Q\" to \"--Q\": try to take an enemy P / protect my Q.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until \"cancel\"/\"nevermind\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.  If a piece I'm protecting can't be saved I sit and tell you the X is coming - tell me \"go\" to make moves anyway.\n");
     output("tellics ptell After a \"+X\":  \"Mates Me\" = I protect the X to the max (sit before it must be given up, no placing an X on the board if none is there); \"Mates Him\" = I sacrifice material to take the X.\n");
-    output("tellics ptell I send these directives myself, once a turn: \"++X\" + \"Mates Him\" = I'm behind in material and want an X (sacrifice to take it - feed me); \"--X\" + \"Mates Me\" = please withhold an X (it would hang on my board, or I'm getting mated).  \"x\" retracts; the state resets when it changes or goes away.\n");
+    output("tellics ptell I send these directives myself, once a turn: \"++X\" + \"Mates Him\" = I'm behind in material and want an X (sacrifice to take it - feed me); \"--X\" + \"Mates Me\" = please withhold an X (it would hang on my board, or I'm getting mated).  \"nevermind\" retracts a piece that is no longer good or bad (the state resets when it changes or goes away).\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
     output("tellics ptell \"nevermind\"/\"x\"/\"cancel\": retract a pending \"sit\" before I sat - I keep moving; also resets the piece directives to default (no piece is \"good\" or \"bad\" anymore).  It does not get me up (use \"go\" for that).\n");
   } else if(!strcasecmp(str, "mates")) {
@@ -227,7 +227,8 @@ void tellPartnerClock()
  *           this is the "we're getting mated" case).  A mated
  *           position retracts everything (nothing would help).  The
  *           directives are standing (two signs) and live in the
- *           static; a changed or vanished state retracts with "x"
+ *           static; a changed or vanished state retracts with
+ *           "nevermind"
  *           first (the partner's "x" = reset the piece directives).
  */
 void tellPartnerDirectives()
@@ -245,7 +246,7 @@ void tellPartnerDirectives()
   {
 	 /* checkmated (findMove will sit "I am mated" for it) - nothing
 	  * we ask for will help */
-	 if (lastSent) { output("tellics ptell x\n"); lastSent = 0; }
+	 if (lastSent) { output("tellics ptell nevermind\n"); lastSent = 0; }
 	 return;
 	}
 
@@ -272,7 +273,7 @@ void tellPartnerDirectives()
 
   if (code == lastSent) return;	/* state unchanged, no repeat */
 
-  if (lastSent) output("tellics ptell x\n");
+  if (lastSent) output("tellics ptell nevermind\n");
 
   if (code != 0)
   {
