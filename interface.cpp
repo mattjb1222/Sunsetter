@@ -943,6 +943,22 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
 
    else if(!strcmp(arg[0], "otim"))
       gameBoard.setTime(otherColor(gameBoard.getDeepBugColor()), atoi(arg[1]) *10);
+
+   else if(!strcmp(arg[0], "parntime"))
+   {
+      /* Server report (via icsdrone) of the partner board's clocks:
+       * <partner clock> <partner's opponent clock>, 1/100th seconds -
+       * same meaning and units as the partner's own "ptell time",
+       * but derived from the server's board renders, so a human
+       * partner has no need to ptell anything (and we send it no
+       * clock ptells either). */
+      if (arg[1][0] != '\0')
+      {
+      partnerTime = atoi(arg[1]);
+      partOppTime = atoi(arg[2]);
+      partnerClockKnown = 1;
+      }
+   }
     
    else if(!strcmp(arg[0], "white")) 
       {

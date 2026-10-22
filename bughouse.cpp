@@ -304,9 +304,11 @@ int main(int argc, char **argv)
 		gameBoard.playMove(m, 1);
 		justPlayedMove = 1;
 
-		/* Tell the partner our clocks, so it can decide when to sit
-		 * for a piece */
-		if (currentRules == BUGHOUSE) tellPartnerClock();
+		/* We no longer ptell our clocks to the partner after every
+		 * move: with an icsdrone the partner's own drone relays our
+		 * board's clocks to it from the server renders ("parntime"),
+		 * and a human partner just reads them off the screen - the
+		 * ptell stream was spam for them either way. */
 		}
 		}
 		
