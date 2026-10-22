@@ -367,6 +367,14 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
   gameBoard.applyPartnerDrop(toldMove);
   stopThought();
   if (sitting) unsit(); /* the drop made our board playable */
+  /* startSearchOver(): the position changed mid-turn, so whatever
+   * search result we had (an aborted pass, or a pre-sit best move
+   * - main plays a non-bad rightMove as-is, without an isLegal
+   * check) is stale.  Re-search from scratch with the dropped
+   * piece - the same as the move-command delivery path in
+   * interface.cpp.  Harmless while waiting for the opponent
+   * (reSearch is reset at the top of findMove). */
+  startSearchOver();
   }
   else if(!toldMove.isBad()) doMove(toldMove);  
   else if(!strcasecmp(arg1, "sitting") || !strcasecmp(arg1, "frozen")) { partsitting = 1;  unsit();}
