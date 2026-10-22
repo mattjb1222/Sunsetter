@@ -2078,6 +2078,23 @@ void findMove(move *rightMove)
   skipGhosts = 0;
 
   do {
+	/* A move told by the partner (doMove() via a ptell move, e.g.
+	 * "Qf3"): play it unconditionally - even if it loses, even if
+	 * we're mated soon - skip this pass' search.  A stale tell (no
+	 * longer legal, e.g. a drop landed on its target square) is
+	 * dropped and we search normally.  A tell that arrives
+	 * mid-search (stopThought abort) or mid-sit (unsit) is caught
+	 * by the post-loop check below instead. */
+	if ((!overideMove.isBad()) && (gameBoard.isLegal(overideMove)))
+	{
+	*rightMove = overideMove;
+	overideMove.makeBad();
+	stopThinking = reSearch = forceMove = 0;
+	parttoldgo = 0;	/* the told move is this turn's move (consumes a "go") */
+	parttoldsit = 0;	/* we move, not sit (the sit request is dropped) */
+	goto endOfFindMove;
+	}
+
 		gameBoard.copy(&AIBoard);
    		overideMove.makeBad();
 	
@@ -2319,7 +2336,21 @@ void findMove(move *rightMove)
 	} /* End of Only for Bughouse */ 
 
   } while(reSearch && !gameBoard.isLegal(overideMove) && !forceMove );
- 
+  
+  /* A move told by the partner arrived mid-search (stopThought
+   * abort) or mid-sit (unsit): it takes precedence over the
+   * aborted search result.  (A tell that arrived before the search
+   * was already consumed at the top of the pass; there
+   * parttoldgo is consumed too, so only parttoldsit is left to
+   * drop here - we move, not sit.) */
+  if ((!overideMove.isBad()) && (gameBoard.isLegal(overideMove)))
+  {
+  *rightMove = overideMove;
+	overideMove.makeBad();
+	parttoldsit = 0;
+  }
+
+endOfFindMove:
   
   /* Only for Bughouse */
   if (currentRules == BUGHOUSE)
