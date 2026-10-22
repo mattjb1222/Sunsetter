@@ -42,23 +42,32 @@ void givePartnerHelp(const char *str)
   char buf[MAX_STRING];
 
   if(!strcasecmp(str, "intro")) {
-    output("tellics ptell Hi.  Thanks for being my partner.  Tell me \"help\" for the commands I understand and please visit http://www.d2d4.de/sunsetter.asp\n");
+    output("tellics ptell Hi.  Thanks for being my partner, I am Sunsetter.  Tell me \"help\" for the commands I understand, or \"help <command>\" for details on one.\n");
+    output("tellics ptell I understand these commands: sit, go, sitting (frozen), time, flag, abort, cancel, nevermind, x and help.  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.\n");
   
   } else if(!strcasecmp(str, "sitting") || !strcasecmp(str, "frozen")) {
-    output("tellics ptell if you tell me that you are sitting I know that no stuff comes for me or my opponent. \n");
-  } else if(!strcasecmp(str, "sit") || !strcasecmp(str, "go")) {
-    output("tellics ptell sit means to sit, go means to stop sitting. \n");
+    output("tellics ptell \"sitting\" (or \"frozen\"): tells me you are sitting.  I note it (while you sit, only my moves can feed you pieces) and I get up from my own sit. \n");
+  } else if(!strcasecmp(str, "sit")) {
+    output("tellics ptell \"sit\": I stop moving and sit, waiting for your \"go\" or for a piece to drop for me - even if I am behind on time or not even mated.  One \"sit\" is one sit; say it again if you want me to keep sitting.  A pending one is retracted by \"go\", \"nevermind\", \"x\" or \"cancel\". \n");
+  } else if(!strcasecmp(str, "go")) {
+    output("tellics ptell \"go\": I get up from sitting, and if I am mated-soon I make exactly one move instead of sitting.  Also retracts a pending \"sit\". \n");
   } else if(!strcasecmp(str, "flag")) {
-    output("tellics ptell Use flag to tell me to flag my opponent (I usually have autoflag on, but sometimes I forget).\n");
+    output("tellics ptell \"flag\": I flag my opponent on my board.  I usually auto-flag when my clock runs out, but say it if you want to be sure.\n");
   } else if(!strcasecmp(str, "time")) {
-    output("tellics ptell Tell me time <my clock> <my opponents clock> (in 1/100th seconds) to help me decide when to sit for a piece. I will tell you my clocks the same way.\n");
+    output("tellics ptell \"time <your clock> <your opponents clock>\" (1/100th seconds): tells me your board's clocks so I know when I am up on time.  When my icsdrone relays the server's clocks to me this is redundant but harmless.\n");
   } else if(!strcasecmp(str, "abort")) {
-    output("tellics ptell Use abort to make me offer or accept an abort request\n");
+    output("tellics ptell \"abort\": I offer an abort (and accept yours).\n");
+  } else if(!strcasecmp(str, "cancel")) {
+    output("tellics ptell \"cancel\": reset the sit bookkeeping - clears your-sitting, my sitting, and my pending sit request.\n");
+  } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
+    output("tellics ptell \"nevermind\"/\"x\": retract a pending \"sit\" before I sat - I keep moving.  It does not get me up (use \"go\" for that).\n");
+  } else if(!strcasecmp(str, "help")) {
+    output("tellics ptell \"help\": the command list; \"help <command>\": details on that command, like this.\n");
   } else if(str[0] == '\0') {
-    output("tellics ptell I understand the following commands:  sitting/frozen, sit, go/move, time, flag and abort. Also If you tell me a move then I'll play it. Tell me help <the command> for help on that command.\n");
+    output("tellics ptell I understand the following commands: sit, go, sitting (frozen), time, flag, abort, cancel, nevermind, x and help.  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.  \"help <command>\" gives details.\n");
 
   } else {
-    sprintf(buf, "tellics ptell Sorry I don't have help on %s\n", str);
+    sprintf(buf, "tellics ptell Sorry, I don't have help on %s.  Tell me \"help\" for the command list.\n", str);
     output(buf);
   }
 }
@@ -226,14 +235,23 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
   }
   else if(!toldMove.isBad()) doMove(toldMove);  
   else if(!strcasecmp(arg1, "sitting") || !strcasecmp(arg1, "frozen")) { partsitting = 1;  unsit();}
-  /* A partner request to sit never makes us sit: we sit based on
-   * our own position (mated soon, see findMove()), not on the
-   * partner's request.  We deliberately say nothing, to avoid an
-   * endless sit - refuse - sit loop with other programs */
-  else if(!strcasecmp(arg1, "sit")) { /* keep moving */ } 
-  else if(!strcasecmp(arg1, "go")) { parttoldgo = 1; unsit(); stopThought(); } 
+  /* A partner request to sit is obeyed: parttoldsit makes
+   * findMove() sit - even if we aren't mated or aren't up on time
+   * (the canSitByClock() veto only applies to our *voluntary*
+   * sitting, not to an explicit partner request).  A "go"
+   * (toldPartGoThisTurn) takes precedence and makes one move, and a
+   * "go"/"cancel"/"nevermind"/"x" drops the request; the request is
+   * one-shot (consumed when we sit), so a partner that
+   * wants a long sit simply says "sit" again.  We say nothing here
+   * (no ptell flood); findMove() says "sitting" when it actually
+   * sits. */
+  else if(!strcasecmp(arg1, "sit")) { parttoldsit = 1; stopThought(); } 
+  else if(!strcasecmp(arg1, "go")) { parttoldgo = 1; parttoldsit = 0; unsit(); stopThought(); } 
   else if(!strcasecmp(arg1, "flag")) output("tellics flag\n");
-  else if(!strcasecmp(arg1, "cancel")){ partsitting = 0;   sitting = 0; toldpartisit = 0; }
+  /* Retraction of a pending sit request: just drop parttoldsit (the
+   * partner's "cancel"/"nevermind"/"x" - "go" above does the same). */
+  else if(!strcasecmp(arg1, "nevermind") || !strcasecmp(arg1, "x")) { parttoldsit = 0; return 1; }
+  else if(!strcasecmp(arg1, "cancel")){ partsitting = 0;   sitting = 0; toldpartisit = 0; parttoldsit = 0; }
   else if(!strcasecmp(arg1, "abort")) output("tellics abort\n");
   else if(!strcasecmp(arg1, "hi") || !strcasecmp(arg1, "hello") ||
 	  !strcasecmp(arg1, "hiya") || !strcasecmp(arg1, "hi!")) { output("tellics ptell hi!\n");

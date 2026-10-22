@@ -606,7 +606,7 @@ void boardStruct::resetBoard()
    initializeHistory(); 
    
    /* Bughouse Garbage */
-   psittinglong =  partsitting = toldpartisit = toldparttosit= parttoldgo = 0; 
+   psittinglong =  partsitting = toldpartisit = toldparttosit= parttoldgo = parttoldsit = 0; 
    
    /* For the stats */
    stats_overallsearches = stats_overallqsearches = stats_overallticks = 0; 
@@ -708,7 +708,7 @@ piece symbolPiece(char symbol) {
 void boardStruct::setBoard(const char *fen, const char *turn, const char *castles, const char *ep) {
 	// Reset
 	initializeHistory();
-	psittinglong = partsitting = toldpartisit = toldparttosit = parttoldgo = 0;
+	psittinglong = partsitting = toldpartisit = toldparttosit = parttoldgo = parttoldsit = 0;
 	stats_overallsearches = stats_overallqsearches = stats_overallticks = 0;
 	firstBigValue = 0;
 	moveNum = 1;

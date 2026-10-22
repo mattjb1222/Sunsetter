@@ -30,6 +30,7 @@ extern int sitting;         /* If Sunsetter is sitting */
 extern int toldpartisit;	/* If we decided to sit on our own */
 extern int toldparttosit;
 extern int parttoldgo;
+extern int parttoldsit; 	 /* If partner told us to sit (obeyed in findMove) */
 extern int partsitting;      /* If it told partner to sit  */
 extern int psittinglong; 	 /* for how long our part has been sitting on his own */
 

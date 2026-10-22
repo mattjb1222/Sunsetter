@@ -78,6 +78,7 @@ int sitting;
 int toldpartisit;
 int toldparttosit;
 int parttoldgo; 
+int parttoldsit; 
 int partsitting;
 int psittinglong; 
 

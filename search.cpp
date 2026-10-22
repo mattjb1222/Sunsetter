@@ -2094,12 +2094,22 @@ void findMove(move *rightMove)
 	 * time our partner can win with.  When our partner told us
 	 * "go" (toldPartGoThisTurn) we make one move even though we
 	 * get mated: our captures feed the partner, and the opponent
-	 * might miss the mate.  We never resign, we just play out to
+	 * might miss the mate.  A partner's explicit "sit" request
+	 * (parttoldsit) is always obeyed while it is pending: we sit
+	 * and wait for a "go" or a drop even when we are behind on
+	 * time (canSitByClock() 0) or not mated at all - the clock
+	 * veto applies to our *voluntary* sitting, not to the
+	 * partner's request.  We never resign, we just play out to
 	 * the end */
 
-	if ((bestValue <= -MATE) && (!sitting)
-	  && ((currentRules == BUGHOUSE)
-	      && (rightMove->isBad() || (!toldPartGoThisTurn && canSitByClock())))) 
+	int obeyPartSit = parttoldsit && !toldPartGoThisTurn;
+
+	if (((!sitting)
+	  && ((rightMove->isBad() && (bestValue <= -MATE))
+	      || ((bestValue <= -MATE) && (!toldPartGoThisTurn)
+	          && (canSitByClock() || parttoldsit))
+	      || obeyPartSit))
+	  && (currentRules == BUGHOUSE)) 
 
 	{ 
 	/* If the forced mate sequence costs us material (we lose more
@@ -2141,6 +2151,10 @@ void findMove(move *rightMove)
 		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
 		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
 	}
+	else if (obeyPartSit && (bestValue > -MATE)) 
+	{
+		output ("tellics ptell sitting (partner told me to sit)\n"); 
+	}
 	else if (losingMaterial) 
 	{
 		output ("tellics ptell sitting (I am dead soon, I will lose material, tell me \"go\" to make a few moves)\n"); 
@@ -2150,6 +2164,9 @@ void findMove(move *rightMove)
 		output ("tellics ptell sitting (I am dead soon, tell me \"go\" to make a few moves)\n"); 
 	}
 	sitting =1; 
+	parttoldsit = 0; /* one-shot request, consumed: a partner that
+	                    wants a long sit says "sit" again; a "go"
+	                    arriving here (or a drop) ends the sit */
 	while ((sitting) && (!reSearch)) {pollForInput();} 
 	}
 
