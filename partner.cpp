@@ -237,8 +237,7 @@ void tellPartnerDirectives()
 					   * (standing "++"), 60+p = withhold type p
 					   * (standing "--") */
   move aim[MAX_MOVES];
-  piece x;
-  int balance, take, hold, code;
+  int balance, requested, take, hold, code, safe;
 
   if ((currentRules != BUGHOUSE) || (!gameInProgress) || (analyzeMode)) return;
 
@@ -254,20 +253,27 @@ void tellPartnerDirectives()
 
   /* A request if we're behind, for a piece whose value plausibly
    * closes the gap (the deficit thresholds are in pValue units) */
-  take = 0;
-  if (balance <= -(2 * pValue[QUEEN])) take = QUEEN;
-  else if (balance <= -pValue[QUEEN]) take = ROOK;
-  else if (balance <= -pValue[ROOK]) take = KNIGHT;
+  requested = 0;
+  if (balance <= -(2 * pValue[QUEEN])) requested = QUEEN;
+  else if (balance <= -pValue[QUEEN]) requested = ROOK;
+  else if (balance <= -pValue[ROOK]) requested = KNIGHT;
 
+  /* Safe/unsafe is piece-independent (a square safe for a rook is safe for a
+   * queen and vice versa - hasSafeDropSquare ignores the piece type), so
+   * evaluate it once. */
+  safe = gameBoard.hasSafeDropSquare(requested);
+
+  take = requested;
   if ((take != 0) && (gameBoard.getPieceInHand(gameBoard.getDeepBugColor(), take) >= 1)) take = 0;	/* we can drop it ourselves */
-  if ((take != 0) && (!gameBoard.hasSafeDropSquare(take))) take = 0;	/* it would just hang */
+  if ((take != 0) && (!safe)) take = 0;	/* it would just hang */
 
-  /* Otherwise: withhold the most valuable piece type that can't be
-   * placed safely on our board */
+  /* Withhold, if we can't place anything safely: withhold the piece we were
+   * about to request (directly responsive - "I wanted X but it would hang")
+   * if one was requested, else the most valuable piece (the queen, the worst
+   * waste). */
   hold = 0;
-  if (take == 0)
-	 for (x = QUEEN; x >= PAWN; x--)
-	   if (!gameBoard.hasSafeDropSquare(x)) { hold = x; break; }
+  if ((take == 0) && (!safe))
+	 hold = (requested != 0) ? requested : QUEEN;
 
   code = (take != 0) ? (10 + take) : (hold != 0) ? (60 + hold) : 0;
 

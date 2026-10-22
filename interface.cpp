@@ -1127,6 +1127,13 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
             stopThought();
             if (sitting) unsit();
             startSearchOver();
+            /* Re-evaluate our own piece directives against the FRESH hand:
+             * tellPartnerDirectives() at turn start may have decided on a
+             * stale holding (this report can arrive mid-turn, after that
+             * decision).  It is idempotent/anti-spam (lastSent), so a
+             * changed decision retracts the stale ptell ("nevermind") and
+             * sends the current one (or nothing). */
+            tellPartnerDirectives();
             }
          }
       }
