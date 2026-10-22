@@ -58,11 +58,11 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "abort")) {
     output("tellics ptell \"abort\": I offer an abort (and accept yours).\n");
   } else if(!strcasecmp(str, "cancel")) {
-    output("tellics ptell \"cancel\": reset the sit bookkeeping and the piece directives.\n");
+    output("tellics ptell \"cancel\": like \"nevermind\"/\"x\" (see there): retract a pending \"sit\" and reset the piece directives to default.\n");
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
     output("tellics ptell \"+P\" to \"++++P\" and \"-Q\" to \"----Q\" (one to four signs): try to take an enemy P / protect my Q, harder with more signs.  \"++\" to \"++++\" (one to four signs): trading is good; \"--\" to \"----\": trading is bad.  If a piece I'm protecting can't be saved I sit and tell you the X is coming - tell me \"go\" to make moves anyway.\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
-    output("tellics ptell \"nevermind\"/\"x\": retract a pending \"sit\" before I sat - I keep moving.  It does not get me up (use \"go\" for that).\n");
+    output("tellics ptell \"nevermind\"/\"x\"/\"cancel\": retract a pending \"sit\" before I sat - I keep moving; also resets the piece directives to default (no piece is \"good\" or \"bad\" anymore).  It does not get me up (use \"go\" for that).\n");
   } else if(!strcasecmp(str, "help")) {
     output("tellics ptell \"help\": the command list; \"help <command>\": details on that command, like this.\n");
   } else if(str[0] == '\0') {
@@ -286,10 +286,12 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
   else if(!strcasecmp(arg1, "sit")) { parttoldsit = 1; stopThought(); } 
   else if(!strcasecmp(arg1, "go")) { parttoldgo = 1; parttoldsit = 0; unsit(); stopThought(); } 
   else if(!strcasecmp(arg1, "flag")) output("tellics flag\n");
-  /* Retraction of a pending sit request: just drop parttoldsit (the
-   * partner's "cancel"/"nevermind"/"x" - "go" above does the same). */
-  else if(!strcasecmp(arg1, "nevermind") || !strcasecmp(arg1, "x")) { parttoldsit = 0; return 1; }
-  else if(!strcasecmp(arg1, "cancel")){ partsitting = 0;   sitting = 0; toldpartisit = 0; parttoldsit = 0; { int di; for (di = 1; di <= 5; di++) partTake[di] = partGuard[di] = 0; } partTrade = 0; }
+  /* Retraction of a pending sit request, and a reset of the piece
+   * directives to default (no piece is "good"/"bad"/"to take"
+   * anymore):  the partner's "cancel"/"nevermind"/"x".  These do NOT
+   * get us up from sitting (a "go" does) and leave the sit
+   * bookkeeping (partsitting, toldpartisit) alone. */
+  else if(!strcasecmp(arg1, "cancel") || !strcasecmp(arg1, "nevermind") || !strcasecmp(arg1, "x")) { parttoldsit = 0; { int di; for (di = 1; di <= 5; di++) partTake[di] = partGuard[di] = 0; } partTrade = 0; return 1; }
   else if(!strcasecmp(arg1, "abort")) output("tellics abort\n");
   else if(!strcasecmp(arg1, "hi") || !strcasecmp(arg1, "hello") ||
 	  !strcasecmp(arg1, "hiya") || !strcasecmp(arg1, "hi!")) { output("tellics ptell hi!\n");
