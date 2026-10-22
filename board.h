@@ -473,6 +473,13 @@ struct boardStruct {
   void removePieceFromHand(color c, piece p, int hash);
   
   void setPieceInHand(color c, piece p, int num);
+
+  int materialBalanceForDeepBug();	/* + = we're up in material (board + both
+					   * holdings; the "material" member is white-positive,
+					   * this re-signs it for the bughouse side to move) */
+  int hasSafeDropSquare(piece p);	/* an empty square of our board not
+					   * attacked by the opponent (drop-safety, for the
+					   * "withhold" partner directive) */
   void setTime(color side, int time);
   void setDeepBugColor(color c);
   void setColorOnMove(color c);

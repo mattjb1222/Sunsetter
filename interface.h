@@ -94,4 +94,8 @@ extern int partOppTime;            /* The partners opponents clock,
 extern int partnerClockKnown;      /* 1 if the partner told us it's
 							  clocks */
 
+void tellPartnerDirectives();        /* Sunsetter's own piece
+							   * directives (request / withhold),
+							   * once per turn of our own */
+
 #endif

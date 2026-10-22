@@ -62,6 +62,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
     output("tellics ptell \"+P\" to \"++Q\" and \"-Q\" to \"--Q\": try to take an enemy P / protect my Q.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until \"cancel\"/\"nevermind\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.  If a piece I'm protecting can't be saved I sit and tell you the X is coming - tell me \"go\" to make moves anyway.\n");
     output("tellics ptell After a \"+X\":  \"Mates Me\" = I protect the X to the max (sit before it must be given up, no placing an X on the board if none is there); \"Mates Him\" = I sacrifice material to take the X.\n");
+    output("tellics ptell I send these directives myself, once a turn: \"++X\" + \"Mates Him\" = I'm behind in material and want an X (sacrifice to take it - feed me); \"--X\" + \"Mates Me\" = please withhold an X (it would hang on my board, or I'm getting mated).  \"x\" retracts; the state resets when it changes or goes away.\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
     output("tellics ptell \"nevermind\"/\"x\"/\"cancel\": retract a pending \"sit\" before I sat - I keep moving; also resets the piece directives to default (no piece is \"good\" or \"bad\" anymore).  It does not get me up (use \"go\" for that).\n");
   } else if(!strcasecmp(str, "mates")) {
@@ -205,6 +206,87 @@ void tellPartnerClock()
            boardClock(otherColor(gameBoard.getDeepBugColor())));
    output(buf);
    }
+
+
+/*
+ * Function: tellPartnerDirectives
+ * Input:    None
+ * Output:   None (ptells the partner when the state changes)
+ * Purpose:  Sunsetter gives piece directives too, once per turn of our
+ *           own, before the search.  If we're behind in material
+ *           (board + both holdings, see materialBalanceForDeepBug())
+ *           we request a piece that plausibly closes the gap:
+ *           "++q" + "Mates Him" (I take the X at any cost - feed me
+ *           an X), or "++r"/"++n" for smaller deficits.  We don't
+ *           request a piece we can drop from our own holding, and we
+ *           don't request one that would just hang (no safe square).
+ *           Otherwise we ask to withhold the most valuable piece type
+ *           that can't be placed safely on our board (every empty
+ *           square attacked): "--q" + "Mates Me" (an X there would
+ *           be lost - material loss; if the king has no safe square
+ *           this is the "we're getting mated" case).  A mated
+ *           position retracts everything (nothing would help).  The
+ *           directives are standing (two signs) and live in the
+ *           static; a changed or vanished state retracts with "x"
+ *           first (the partner's "x" = reset the piece directives).
+ */
+void tellPartnerDirectives()
+{
+  static int lastSent = 0;	/* 0 = nothing; 10+p = request type p
+					   * (standing "++"), 60+p = withhold type p
+					   * (standing "--") */
+  move aim[MAX_MOVES];
+  piece x;
+  int balance, take, hold, code;
+
+  if ((currentRules != BUGHOUSE) || (!gameInProgress) || (analyzeMode)) return;
+
+  if (gameBoard.moves(aim) == 0)
+  {
+	 /* checkmated (findMove will sit "I am mated" for it) - nothing
+	  * we ask for will help */
+	 if (lastSent) { output("tellics ptell x\n"); lastSent = 0; }
+	 return;
+	}
+
+  balance = gameBoard.materialBalanceForDeepBug();
+
+  /* A request if we're behind, for a piece whose value plausibly
+   * closes the gap (the deficit thresholds are in pValue units) */
+  take = 0;
+  if (balance <= -(2 * pValue[QUEEN])) take = QUEEN;
+  else if (balance <= -pValue[QUEEN]) take = ROOK;
+  else if (balance <= -pValue[ROOK]) take = KNIGHT;
+
+  if ((take != 0) && (gameBoard.getPieceInHand(gameBoard.getDeepBugColor(), take) >= 1)) take = 0;	/* we can drop it ourselves */
+  if ((take != 0) && (!gameBoard.hasSafeDropSquare(take))) take = 0;	/* it would just hang */
+
+  /* Otherwise: withhold the most valuable piece type that can't be
+   * placed safely on our board */
+  hold = 0;
+  if (take == 0)
+	 for (x = QUEEN; x >= PAWN; x--)
+	   if (!gameBoard.hasSafeDropSquare(x)) { hold = x; break; }
+
+  code = (take != 0) ? (10 + take) : (hold != 0) ? (60 + hold) : 0;
+
+  if (code == lastSent) return;	/* state unchanged, no repeat */
+
+  if (lastSent) output("tellics ptell x\n");
+
+  if (code != 0)
+  {
+	 char pieceLetter[PIECES] = { 0, 'p', 'r', 'n', 'b', 'q' };
+	 char buf[MAX_STRING];
+
+	 sprintf(buf, "tellics ptell %c%c%c\n", (code < 60) ? '+' : '-', (code < 60) ? '+' : '-', pieceLetter[code % 10]);
+	 output(buf);
+	 output((code < 60) ? "tellics ptell Mates Him\n" : "tellics ptell Mates Me\n");
+	 lastSent = code;
+	}
+  else
+	 lastSent = 0;
+	}
 
 
 /* Function: parsePartnerDirective

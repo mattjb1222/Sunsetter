@@ -296,7 +296,10 @@ int main(int argc, char **argv)
 		
 		if ((gameBoard.getColorOnMove() == gameBoard.getDeepBugColor()))
 		{
-
+			/* tell the partner what pieces I want / should withhold
+			 * (ptell "++x"/"--x" + "Mates Him"/"Mates Me"; quiet while
+			 * the state is unchanged, retracts with "x") */
+			tellPartnerDirectives();
 
 #ifdef __EMSCRIPTEN__
 			if (gameBoard.custom || gameBoard.getMoveNum()>9 || !bookMove(&m, gameBoard)) { // What is this doing?  @niklasf

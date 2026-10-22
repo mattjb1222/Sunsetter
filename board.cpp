@@ -528,6 +528,34 @@ void boardStruct::setPieceInHand(color c, piece p, int num)
    }
 
 
+
+int boardStruct::materialBalanceForDeepBug()
+   {
+   /* "material" is maintained incrementally by every board and
+    * holding change (addPiece/removePiece/movePiece, addPieceToHand,
+    * setPieceInHand), positive meaning white is up in material */
+   return (getDeepBugColor() == WHITE) ? material : -material;
+   }
+
+
+
+int boardStruct::hasSafeDropSquare(piece p)
+   {
+   square s;
+   color enemy = otherColor(getDeepBugColor());
+
+   /* p is only there to make the intent clear - the safety of a
+    * dropped piece depends on the square, not on the piece type */
+   (void) p;
+
+   for (s = A1; s <= H8; s++)
+      if ((position[s] == NONE) && (attacks[enemy][s] == 0))
+	 return 1;
+
+   return 0;
+   }
+
+
 /*
  * Function: rank
  * Input:    A square.
