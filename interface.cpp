@@ -1098,13 +1098,35 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          int ourColor = gameBoard.getDeepBugColor();
          int otherColor = (ourColor == WHITE) ? BLACK : WHITE;
          int counts1[PIECES], counts2[PIECES], p;
+         int changed = 0;
          for (p = PAWN; p <= QUEEN; p++) { counts1[p] = 0; counts2[p] = 0; }
          parseHoldingList(arg[1], counts1);
          parseHoldingList(arg[2], counts2);
          for (p = PAWN; p <= QUEEN; p++)
             {
-            gameBoard.setPieceInHand(ourColor, p, counts1[p]);
-            gameBoard.setPieceInHand(otherColor, p, counts2[p]);
+            if (gameBoard.getPieceInHand(ourColor, p) != counts1[p]) changed = 1;
+            if (gameBoard.getPieceInHand(otherColor, p) != counts2[p]) changed = 1;
+            }
+         if (changed)
+            {
+            for (p = PAWN; p <= QUEEN; p++)
+               {
+               gameBoard.setPieceInHand(ourColor, p, counts1[p]);
+               gameBoard.setPieceInHand(otherColor, p, counts2[p]);
+               }
+            /* The droppable pool changed mid-turn (our side: the
+             * partner captured; their side: our captures) - the
+             * search space changed (ghost drops, both colors).  Re-
+             * search with it: mid-think the aborted pass re-runs
+             * (fresh AIBoard copy); mid-sit we get up (the new
+             * pieces might win).  Same as a partner drop.  A
+             * holding change while waiting for the opponent is
+             * harmless (reSearch is reset at the top of findMove).
+             * The changed-check keeps resends of the same holding
+             * (the server re-sends on sync events) from re-searching. */
+            stopThought();
+            if (sitting) unsit();
+            startSearchOver();
             }
          }
       }
