@@ -60,14 +60,14 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "cancel")) {
     output("tellics ptell \"cancel\": like \"nevermind\"/\"x\" (see there): retract a pending \"sit\" and reset the piece directives to default.\n");
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
-    output("tellics ptell \"+P\" to \"++Q\" and \"-Q\" to \"--Q\": try to take an enemy P / protect my Q.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until \"cancel\"/\"nevermind\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.  If a piece I'm protecting can't be saved I sit and tell you the X is coming - tell me \"go\" to make moves anyway.\n");
-    output("tellics ptell After a \"+X\":  \"Mates Me\" = I protect the X to the max (sit before it must be given up, no placing an X on the board if none is there); \"Mates Him\" = I sacrifice material to take the X.\n");
+    output("tellics ptell \"+P\" to \"++Q\": try to take an enemy P (feed me a P).  \"-Q\" to \"--Q\": protect my Q - I move it to safety / refuse to trade it.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until \"cancel\"/\"nevermind\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.\n");
+    output("tellics ptell After a \"-Q\": add \"Mates Me\" and if I can't save the Q I sit and tell you it's coming - tell me \"go\" to make moves anyway.  After a \"+X\": \"Mates Him\" = I sacrifice material to take the X.\n");
     output("tellics ptell I send these directives myself, once a turn: \"++X\" + \"Mates Him\" = I'm behind in material and want an X (sacrifice to take it - feed me); \"--X\" + \"Mates Me\" = please withhold an X (it would hang on my board, or I'm getting mated).  \"nevermind\" retracts a piece that is no longer good or bad (the state resets when it changes or goes away).\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
     output("tellics ptell \"nevermind\"/\"x\"/\"cancel\": retract a pending \"sit\" before I sat - I keep moving; also resets the piece directives to default (no piece is \"good\" or \"bad\" anymore).  It does not get me up (use \"go\" for that).\n");
   } else if(!strcasecmp(str, "mates")) {
-    output("tellics ptell After a \"+X\":  \"Mates Me\" - I protect the X to the max: I sit before it must be given up, and I don't place an X on the board if none exists there.\n");
-    output("tellics ptell \"Mates Him\" - I sacrifice material to take the X.\n");
+    output("tellics ptell After a \"-X\":  \"Mates Me\" - I protect the X to the max: I move it to safety / refuse to trade it, and if I can't save it I sit before it must be given up (tell me \"go\" to move anyway).\n");
+    output("tellics ptell After a \"+X\":  \"Mates Him\" - I sacrifice material to take the X.\n");
   } else if(!strcasecmp(str, "help")) {
     output("tellics ptell \"help\": the command list; \"help <command>\": details on that command, like this.\n");
   } else if(str[0] == '\0') {
@@ -337,20 +337,34 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
     return 1;
   }
 
-  /* Piece directives may be one or more tokens ("ptell +Q --") */
-  if((parsePartnerDirective(arg1)) || (parsePartnerDirective(arg2)) || (parsePartnerDirective(arg3))) return 1;
+  /* Piece directives may be one or more tokens ("ptell +Q --").  A
+   * directive may be followed by "Mates Me"/"Mates Him" in the same
+   * ptell ("ptell -r Mates Me"), so remember whether one was parsed and
+   * still check for "Mates" below before exiting. */
+  int gotDirective = (parsePartnerDirective(arg1)) || (parsePartnerDirective(arg2)) || (parsePartnerDirective(arg3));
 
-  /* "Mates Me"/"Mates Him" after a piece request: strengthen that
-   * request to the max - "Mates Me": protect the piece to the max
-   * (sit before it must be given up; don't place it on the board
-   * if none exists there); "Mates Him": sacrifice material to take
-   * it.  Applies to every pending "+x". */
-  if (!strcasecmp(arg1, "mates"))
+  /* "Mates Me"/"Mates Him" after a piece directive: strengthen it to
+   * the max - "Mates Me": protect the piece to the max (move it to
+   * safety / refuse to trade it, and sit before it must be given up);
+   * "Mates Him": sacrifice material to take it.  It may ride in the same
+   * ptell as the directive (arg2="Mates", arg3="me"/"him") or be its own
+   * ptell (arg1="Mates", arg2="me"/"him").  "Mates Me" applies to a
+   * pending "-x" (partGuard - our piece, the guard-sit can fire); for
+   * legacy it also applies to "+x" (partTake, though we never hold an
+   * enemy piece so it can't sit). */
   {
   int di;
-  if (!strcasecmp(arg2, "me")) { for (di = PAWN; di <= QUEEN; di++) if (partTake[di]) { partTake[di] = 2; partMatesMe[di] = 1; } return 1; }
-  if (!strcasecmp(arg2, "him")) { for (di = PAWN; di <= QUEEN; di++) if (partTake[di]) { partTake[di] = 2; partMatesHim[di] = 1; } return 1; }
+  const char *mh = NULL;
+  if (!strcasecmp(arg1, "mates")) mh = arg2;
+  else if (!strcasecmp(arg2, "mates")) mh = arg3;
+  if (mh)
+  {
+  if (!strcasecmp(mh, "me")) { for (di = PAWN; di <= QUEEN; di++) { if (partTake[di]) { partTake[di] = 2; partMatesMe[di] = 1; } if (partGuard[di]) { partGuard[di] = 2; partMatesMe[di] = 1; } } return 1; }
+  if (!strcasecmp(mh, "him")) { for (di = PAWN; di <= QUEEN; di++) if (partTake[di]) { partTake[di] = 2; partMatesHim[di] = 1; } return 1; }
   }
+  }
+
+  if (gotDirective) return 1;
 
   if(!strcasecmp(arg1, "time")) {
     if (arg2[0] != '\0') { partnerTime = atoi(arg2); partOppTime = atoi(arg3); partnerClockKnown = 1; }

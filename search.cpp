@@ -2134,16 +2134,17 @@ void findMove(move *rightMove)
 
 
 	/* Partner "-X" directive (protect my X, partGuard) and "Mates Me"
-	 * (partMatesMe: protect the X to the max):  if every legal
-	 * move leaves one of our X pieces under-attacked we can't save it -
-	 * the piece is coming (opponent takes it, or drops one on it).  We
-	 * sit for a piece and tell the partner, who can "go" to make us move
-	 * anyway (the do-while re-runs with toldPartGoThisTurn) or a drop for
-	 * us wakes us (startSearchOver).  Runs before searchRoot so we don't
-	 * spend a full search on a position we sit on;  also fills
-	 * rootGuardPend for searchRoot() to order the root moves by
-	 * (protect X first).  One-time (1 sign) resets in the main loop
-	 * / when the piece is lost; standing (2 signs) re-triggers until
+	 * (partMatesMe: protect the X to the max).  For BOTH, order the root
+	 * moves so the protective ones come first (move X to safety / refuse
+	 * to trade it - rootGuardPend, filled by guardRootCheck, sorted in
+	 * searchRoot).  For "Mates Me" only: if every legal move leaves one of
+	 * our X pieces under-attacked we can't save it - the piece is coming
+	 * (opponent takes it, or drops one on it) - we sit for a piece and
+	 * tell the partner, who can "go" to make us move anyway (the do-while
+	 * re-runs with toldPartGoThisTurn) or a drop for us wakes us
+	 * (startSearchOver).  Runs before searchRoot so we don't spend a full
+	 * search on a position we sit on.  One-time (1 sign) resets in the main
+	 * loop / when the piece is lost; standing (2 signs) re-triggers until
 	 * nevermind/x/cancel. */
 
 	int guardSkipSearch = 0;
@@ -2161,9 +2162,12 @@ void findMove(move *rightMove)
 	{
 	int unsavable;
 
-	partGuardOrder = 1;
+	partGuardOrder = 1;   /* order the root moves (protect X first) for
+	                     * both "-x" alone and "-x" + Mates Me */
 	unsavable = guardRootCheck(&AIBoard, us, gtype);
-	if (unsavable)
+	if ((unsavable) && (partMatesMe[gtype]))   /* sit only for "Mates Me"
+	                                        * ("-x" alone just moves to
+	                                        * safety / refuses to trade) */
 	{
 	int pn2 = gtype - PAWN;
 	pn[0] = "PRNBQ"[pn2]; pn[1] = '\0';
