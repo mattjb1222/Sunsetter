@@ -2026,6 +2026,24 @@ static int guardRootCheck(boardStruct *b, color us, piece type)
  * Purpose:  Fills rightMove with the move that Sunsetter thinks is best
  */
 
+/* A told move (doMove) is consumed by findMove() when it is legal
+ * - but isLegal() (validate.cpp) can never say a drop is legal:
+ * it is a lookup in moves(), and moves() generates no drops (only
+ * aimoves() does, for the search).  A partner-told drop ("n@b2")
+ * would be dropped as "stale" and the search's move played instead.
+ * A drop is playable iff we hold the piece and the target is
+ * empty (a drop never gives check and is never pinned; both
+ * bughouse and crazyhouse). */
+static int toldMoveIsLegal(move m)
+{
+   if (m.isBad())
+      return 0;
+   if (m.from() == IN_HAND)
+      return ((gameBoard.getPieceInHand(gameBoard.getDeepBugColor(), m.moved()) > 0)
+             && (gameBoard.pieceOnSquare(m.to()) == NONE));
+   return gameBoard.isLegal(m);
+}
+
 void findMove(move *rightMove)
 {
 
@@ -2085,7 +2103,7 @@ void findMove(move *rightMove)
 	 * dropped and we search normally.  A tell that arrives
 	 * mid-search (stopThought abort) or mid-sit (unsit) is caught
 	 * by the post-loop check below instead. */
-	if ((!overideMove.isBad()) && (gameBoard.isLegal(overideMove)))
+	if (toldMoveIsLegal(overideMove))
 	{
 	*rightMove = overideMove;
 	overideMove.makeBad();
@@ -2223,7 +2241,7 @@ void findMove(move *rightMove)
 	if ((bestValue > -MATE) && (toldparttosit)) 
 	
 		{ 
-		output ("tellics ptell go (I am ok)\n"); 
+		output ("tellics ptell go\n"); 
 		toldparttosit = 0; 
 		}
 	
@@ -2233,29 +2251,42 @@ void findMove(move *rightMove)
 	 * left (checkmated, bad rightMove) we always sit for a piece:
 	 * that's the only way to continue, and the server (e.g.
 	 * Lichess) auto-sits a checkmated player, so our clock
-	 * correctly stops.  With legal moves left we sit too while
-	 * canSitByClock() returns 1 (we have a real lead on time -
-	 * at least 3s ahead and at least double their time, because a
-	 * voluntary sit bleeds our clock: the server stops it only for
-	 * a checkmated player, so the lead is our cushion): sitting
-	 * keeps material, and runs our opponent's clock down - that's
-	 * time our partner can win with.  When our partner told us
-	 * "go" (toldPartGoThisTurn) we make one move even though we
-	 * get mated: our captures feed the partner, and the opponent
-	 * might miss the mate.  A partner's explicit "sit" request
-	 * (parttoldsit) is always obeyed while it is pending: we sit
-	 * and wait for a "go" or a drop even when we are behind on
-	 * time (canSitByClock() 0) or not mated at all - the clock
-	 * veto applies to our *voluntary* sitting, not to the
-	 * partner's request.  We never resign, we just play out to
-	 * the end */
+	 * correctly stops.  With legal moves left we sit too whenever
+	 * the mate is proven, regardless of the clocks: sitting keeps
+	 * material and lets our partner feed us the piece that breaks
+	 * the mate (our clock runs too while we sit - the server
+	 * stops it only for a checkmated player - that bleed is the
+	 * deliberate price of the sit; canSitByClock() now only gates
+	 * the ghost-piece search, not sitting).  When our partner
+	 * told us "go" (toldPartGoThisTurn) we make one move even
+	 * though we get mated: our captures feed the partner, and the
+	 * opponent might miss the mate.  Bot-vs-bot exception
+	 * (partnerSittingLong): if our partner is ANOTHER Sunsetter
+	 * (identified itself in the intro ptell), is sitting on his
+	 * own for an extended period and is up on time, we do NOT
+	 * sit - two Sunsetters sitting at once is a double stall
+	 * (neither board moves, neither board gets fed, the game
+	 * can sit out to a time result): we move instead (our
+	 * captures feed him), sit on the next turn, and he gets up
+	 * with a dropped piece.  A partner's explicit "sit"
+	 * request (parttoldsit) is always obeyed while it is pending,
+	 * even when we are not mated at all.  We never resign, we
+	 * just play out to the end (see partnerSittingLong for
+	 * the bot-vs-bot move-instead-of-sit exception) */
 
 	int obeyPartSit = parttoldsit && !toldPartGoThisTurn;
+
+	/* Bot-vs-bot coordination (see above): the partner is another
+	 * Sunsetter sitting on his own for a while, up on time - move
+	 * instead of sitting (only for legal-moves-left; the fully
+	 * checkmated first branch sits anyway - there is nothing
+	 * else to do) */
+	int keepToMove = partnerSittingLong();
 
 	if (((!sitting)
 	  && ((rightMove->isBad() && (bestValue <= -MATE))
 	      || ((bestValue <= -MATE) && (!toldPartGoThisTurn)
-	          && (canSitByClock() || parttoldsit))
+	          && (!keepToMove))
 	      || obeyPartSit))
 	  && (currentRules == BUGHOUSE)) 
 
@@ -2321,9 +2352,15 @@ void findMove(move *rightMove)
     else 
 
 	{ 
-		/* Mated soon but keeping to move (behind on time, or the
-		 * partner told us to "go"): tell our partner to sit (so we
-		 * get pieces) and re-search, maybe it helps */
+		/* Mated soon but keeping to move: the partner told us
+		 * "go" this turn (make exactly one move - our captures
+		 * feed the partner, the opponent might miss the mate),
+		 * or a bot partner (another Sunsetter) is sitting on his
+		 * own, up on time (feed him with captures, sit on the
+		 * next turn).  Tell our partner to sit (so we get pieces)
+		 * and re-search, maybe it helps.  In the bot case the
+		 * partner is already sitting (partsitting), so nothing is
+		 * said - just play the delaying move we just searched */
 		if ((bestValue <= -MATE) && (!partsitting)) 
 					{ 
 					reSearch =1; 
@@ -2339,7 +2376,7 @@ void findMove(move *rightMove)
     
 	} /* End of Only for Bughouse */ 
 
-  } while(reSearch && !gameBoard.isLegal(overideMove) && !forceMove );
+  } while(reSearch && !toldMoveIsLegal(overideMove) && !forceMove );
   
   /* A move told by the partner arrived mid-search (stopThought
    * abort) or mid-sit (unsit): it takes precedence over the
@@ -2347,7 +2384,28 @@ void findMove(move *rightMove)
    * was already consumed at the top of the pass; there
    * parttoldgo is consumed too, so only parttoldsit is left to
    * drop here - we move, not sit.) */
-  if ((!overideMove.isBad()) && (gameBoard.isLegal(overideMove)))
+  /* Drain the input buffer (the late-tell window below, and the
+   * told-move check after it): our search may end a fraction of a
+   * second before a just-typed partner move reaches us - icsdrone
+   * relays it within ~100 ms - and without this the tell lands one
+   * turn late (a pending overideMove, played on our NEXT turn, or
+   * never if the game ends).  The 200 ms window (non-blocking
+   * polls) only runs with a partner, so plain xboard/crazyhouse
+   * games pay nothing.  A told move in the window wins over the
+   * finished search; a holding/drop relay that re-searches (see
+   * startSearchOver in interface.cpp/partner.cpp) arrives as
+   * reSearch and gets one more pass at the top of the loop next -
+   * harmless here (its overideMove is bad, the told-move check
+   * below misses it, and the main loop's own checkInput() picks up
+   * the rest). */
+  checkInput();
+  if (partner && !analyzeMode)
+  {
+  long wStart = getSysMilliSecs();
+  while ((getSysMilliSecs() - wStart < 200) && overideMove.isBad())
+     checkInput();
+  }
+  if (toldMoveIsLegal(overideMove))
   {
   *rightMove = overideMove;
 	overideMove.makeBad();
@@ -2366,7 +2424,7 @@ endOfFindMove:
    * stays >= 5 for the whole long sit; canSitByClock uses that) */
   if (partsitting && !toldparttosit) { psittinglong ++; if ((psittinglong == 6) && !toldpartisit) output ("tellics ptell go (watch our time)\n"); }
   else { psittinglong = 0; } 	
-	  
+  
   if (toldpartisit) {unsit ();}
 
   // we were waiting for a piece. We got that now. Or our partner told us to go anyway.
@@ -2376,8 +2434,6 @@ endOfFindMove:
   // we told part to sit. Don't expect him to sit more than 1 move     
   
   } /* End of only for Bughouse */
-
-  checkInput();
 
   makeHistoryOld(); 
 

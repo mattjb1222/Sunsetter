@@ -607,6 +607,25 @@ void parseOption(const char *str)
    arg[0][0] = arg[1][0] = arg[2][0] = arg[3][0] = arg[4][0] = '\0';
    sscanf(str, "%s %s %s %s %s", arg[0], arg[1], arg[2], arg[3], arg[4]);
 
+   /* A partner ptell relayed with the "tellics" prefix
+    * ("tellics ptell sit" - icsdrone relays the partner's ptells the
+    * way we output them): shift the tokens so the "ptell" branch
+    * below parses it ("tellics ptell sit" == "ptell sit").  Without
+    * this the "tellics" branch below swallows it (echo-only) and
+    * partner commands (sit/go/sitting/holdings/moves) are lost.
+    * Other "tellics ..." commands keep the echo-only handling. */
+   if ((!strcmp(arg[0], "tellics")) && (!strcmp(arg[1], "ptell")))
+	{
+	char t[MAX_STRING];
+	strcpy(t, arg[1]);
+	strcpy(arg[1], arg[2]);
+	strcpy(arg[2], arg[3]);
+	strcpy(arg[3], arg[4]);
+	arg[4][0] = '\0';
+	strcpy(arg[0], t);
+	}
+
+
    /* Ignore options xboard sends that don't mean much or 
        ones that we dont care about */
   
@@ -752,7 +771,8 @@ void parseOption(const char *str)
 #endif
 
 		partnerClockKnown = 0;   /* We don't know the partners
-					  clocks until it tells us */
+				    clocks until it tells us */
+		partnerIsSunsetter = 0;   /* new game, new partner? */
 		gameInProgress = 0;   /* Also the bughouse soft reset
 				    between games (icsdrone sends "new" instead
 				    of killing us): don't play anything until
@@ -824,6 +844,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          {
          strcpy(partnerName, "");
          partner = 0;
+		partnerIsSunsetter = 0;
          output("tellics set formula f4 && f2\n");
          }
       else if (strcmp(partnerName, arg[1]) != 0) 
@@ -836,6 +857,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          else 
          strcpy(partnerName, arg[1]);
          partner = 1;
+         if (strstr(arg[1], "Sunsetter")) partnerIsSunsetter = 1;
          givePartnerHelp("intro");         
          output("tellics set formula f4 && f1 \n");
          output("tellics unseek\n");
@@ -1146,6 +1168,11 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       {
       partner = 1;                 /* We should have gotten "partner" before,
 									but just to make sure */
+      /* Bot-vs-bot recognition: the partner identifies itself (the
+       * intro ptell "...I am Sunsetter...").  The name is past the
+       * 5-token arg[] window, so scan the whole line (a command ptell
+       * never contains "Sunsetter"; see parsePartnerCommand) */
+      if (strstr(str, "Sunsetter")) partnerIsSunsetter = 1;
       if ((retval = parsePartnerCommand(arg[1], arg[2], arg[3])) == -1) 
 
          {

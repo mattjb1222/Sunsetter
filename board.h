@@ -557,6 +557,20 @@ struct boardStruct {
   square getEnPassantSquare();
   piece pieceOnSquare(square sq);
   int havePieceOf(color c, piece p);  /* 1 if `c` has piece `p` on the board */
+  int partnerBadPieceGain(piece type);	/* How bad it is for the opponent to
+                                           * capture one of our `type` pieces (into
+                                           * their hand and drop it back on our
+                                           * board): the best captureGain for the
+                                           * opponent over all our `type` pieces an
+                                           * enemy piece can take, clamped to >= 0
+                                           * (0 = none of our `type` pieces is a
+                                           * profitable take/drop for them).  Returns
+                                           * the raw measurement; tellPartnerDirectives
+                                           * sends "-X" (protect my X) for the types
+                                           * whose gain is >= pValue[KNIGHT] (a
+                                           * significant net - at least a knight's worth,
+                                           * well above captureGain's imprecise min-max
+                                           * small positives). */
   int guardPieceHang(color us, piece type); /* 1 if a `us` `type` piece is
                                             * under-attacked (attacker > defender) */
   bool isPieceOnSquare(square sq, piece p, color c);   //niklasf for setboard

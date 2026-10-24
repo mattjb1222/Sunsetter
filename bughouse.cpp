@@ -339,7 +339,7 @@ int main(int argc, char **argv)
 			 * would bleed time without knowing we're mated */
 
 			millisecondsPerMove = 10000;
-			if (gameBoard.timeToMove() && (!toldparttosit) && (!partsitting)) {toldparttosit =1; output ("tellics ptell sit (my opponent is waiting for something)\n"); }
+			if (gameBoard.timeToMove() && (!toldparttosit) && (!partsitting)) {toldparttosit =1; output ("tellics ptell sit\n"); }
 			millisecondsPerMove = 100000000;
 		}		
 		

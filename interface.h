@@ -80,9 +80,9 @@ void givePartnerHelp(const char *str);     /* Gives help about the
 											commands Sunsetter understands
 											from it's partner */
 
-int canSitByClock();                  /* 1 if the clocks say we can sit
-								for a piece, 0 if we should keep
-								moving to catch up on time */
+int canSitByClock();                  /* 1 if we're up on time enough to count on a partner drop
+								(gates the ghost-piece search; see
+								canSitByClock in partner.cpp) */
 
 void tellPartnerClock();             /* Tells the partner the clocks of
 								our board */
@@ -93,6 +93,14 @@ extern int partOppTime;            /* The partners opponents clock,
 							  1/100th seconds */
 extern int partnerClockKnown;      /* 1 if the partner told us it's
 							  clocks */
+extern int partnerIsSunsetter;    /* 1 if the partner is another
+				  Sunsetter (bot-vs-bot coordination) */
+
+int partnerSittingLong();         /* 1 if our partner (another
+				  Sunsetter) is sitting on his own for a
+				  while and up on time - we move instead
+				  of sitting (see partner.cpp) */
+
 
 void tellPartnerDirectives();        /* Sunsetter's own piece
 							   * directives (request / withhold),

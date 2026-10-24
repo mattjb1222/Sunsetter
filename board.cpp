@@ -235,6 +235,50 @@ int boardStruct::guardPieceHang(color us, piece type)
    return 0;
    }
 
+/*
+ * Function: partnerBadPieceGain
+ * Input:    A piece type
+ * Output:   How bad it is for the opponent to capture one of our `type` pieces
+ *           (in bughouse the capture puts it in their hand - they drop it
+ *           back on our board): the best (max) captureGain for the opponent
+ *           over all our `type` pieces an enemy piece can take, clamped to
+ *           >= 0 (0 = none of our `type` pieces is a profitable take/drop for
+ *           them).  captureGain > 0 = the opponent nets the piece even after
+ *           we recapture - "bad for them to take".  This returns the raw
+ *           measurement; the -X decision (tellPartnerDirectives) requires the
+ *           gain to be >= pValue[KNIGHT] (a significant net - at least a
+ *           knight's worth; a mere pawn loss does not earn a directive).
+ * Purpose:  tellPartnerDirectives sends "-X" (protect my X - partGuard: move it
+ *           to safety / refuse the trade) for the types whose gain is >=
+ *           pValue[KNIGHT] (a significant net - well above captureGain's
+ *           imprecise min-max small positives for defended pieces).
+ */
+int boardStruct::partnerBadPieceGain(piece type)
+   {
+   color us = getDeepBugColor();
+   color enemy = otherColor(us);
+   bitboard bb, att;
+   int sq, aq, best = 0, gain;
+
+   bb = pieces[type] & occupied[us];
+   while (bb.data)
+      {
+      sq = firstSquare(bb.data);
+      bb.unsetSquare(sq);
+
+      att = attacksTo(sq) & occupied[enemy];
+      while (att.data)
+         {
+         aq = firstSquare(att.data);
+         att.unsetSquare(aq);
+         if (position[aq] == KING) continue;
+         gain = captureGain(enemy, move(aq, sq, position[aq]));
+         if (gain > best) best = gain;
+         }
+      }
+   return best;
+   }
+
 
 /* 
  * Function: movePiece
@@ -670,6 +714,7 @@ void boardStruct::resetBoard()
    
    /* Bughouse Garbage */
    psittinglong =  partsitting = toldpartisit = toldparttosit= parttoldgo = parttoldsit = 0; 
+   partnerIsSunsetter = 0;  /* new game: re-identify the partner */
    { int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = partMatesMe[di] = partMatesHim[di] = 0; partTrade = 0; }
    
    /* For the stats */
@@ -773,6 +818,9 @@ void boardStruct::setBoard(const char *fen, const char *turn, const char *castle
 	// Reset
 	initializeHistory();
 	psittinglong = partsitting = toldpartisit = toldparttosit = parttoldgo = parttoldsit = 0;
+	/* partnerIsSunsetter is deliberately NOT reset here: in a real game the
+	   partner's intro ptell ("...I am Sunsetter...") arrives BEFORE the
+	   setboard, and recognition must survive to the first turn */
 	{ int di; for (di = 0; di < 7; di++) partTake[di] = partGuard[di] = partMatesMe[di] = partMatesHim[di] = 0; partTrade = 0; }
 	stats_overallsearches = stats_overallqsearches = stats_overallticks = 0;
 	firstBigValue = 0;
