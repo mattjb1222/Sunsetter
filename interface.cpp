@@ -774,6 +774,15 @@ void parseOption(const char *str)
 				    clocks until it tells us */
 		partnerIsSunsetter = 0;   /* new game, new partner? */
 		partnerDead = partOppDead = 0;   /* new game: not dead yet */
+		/* Rematch re-arms us: if we were sitting (mated, or waiting
+		 * on "Opp dead") we are blocked in findMove's sit loop
+		 * (pollForInput) - clear the sit + any pending sit state so we
+		 * play the new game instead of staying seated.  icsdrone sends
+		 * "new" (a soft reset) rather than killing us, so this is the
+		 * only place that can un-sit a game-end sit. */
+		unsit();
+		parttoldsit = parttoldgo = partsitting = toldparttosit = psittinglong = 0;
+		resetPartnerDirectives();   /* new game: silently clear the directive state (no spurious nevermind / OK now) */
 		gameInProgress = 0;   /* Also the bughouse soft reset
 				    between games (icsdrone sends "new" instead
 				    of killing us): don't play anything until
@@ -817,6 +826,7 @@ void parseOption(const char *str)
 	  gameBoard.resetBoard();
       zapHashValues();
       resetAI();
+      resetPartnerDirectives();   /* new game: silently clear the directive state (no spurious nevermind / OK now) */
 	  
       gameInProgress = 1;
 	  soughtGame = 0; 
@@ -1090,6 +1100,11 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
 	   gameBoard.setBoard(arg[1], arg[2], arg[3], arg[4]);
 	   zapHashValues();
 	   resetAI();
+	   /* A new board re-arms: if we were sitting (blocked in findMove's
+	    * sit loop) clear it + pending sit state so we play, not sit. */
+	   unsit();
+	   parttoldsit = parttoldgo = partsitting = toldparttosit = psittinglong = 0;
+	   resetPartnerDirectives();   /* new board: silently clear the directive state (no spurious nevermind / OK now) */
 
 	   gameInProgress = 1;
 	   soughtGame = 0;

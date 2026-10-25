@@ -1951,7 +1951,10 @@ assert ( stats_positionsSearched < 1000000000 );  // hoping for the day when
 	 {
 		 if (AIBoard.cantBlock())
 		 {
-			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval();
+			/* Add the moves-to-mate term (as crazyhouse does) so a losing engine
+			 * delays the checkmate: it prefers the move whose mate is found at the
+			 * largest ply (most moves to mate) over one decided only by hand material. */
+			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval() + ply / 2 + 1;
 		 }
 		 else
 		 {
@@ -2048,6 +2051,43 @@ static int toldMoveIsLegal(move m)
              && (gameBoard.pieceOnSquare(m.to()) == NONE));
    return gameBoard.isLegal(m);
 }
+
+
+/* ---- Dead-board announcements to the partner (bughouse) ----
+ *
+ * If we're mated soon (bestValue <= -MATE) we tell the partner "I dead"
+ * (our board is dying - no more pieces will come from it, play fast to
+ * win); if our opponent is (bestValue >= +MATE) we say "Opp dead"
+ * (their board is dying).  Sent once per game (toldOppDead/toldIDead,
+ * reset in resetAI).
+ *
+ * We do NOT report a moves-to-checkmate count: in bughouse the terminal
+ * mate score is material-based (-MATE_IN_ONE + bughouseMateEval(), see the
+ * end of search()), not the count-encoding -MATE_IN_ONE + ply/2 + 1 that
+ * crazyhouse uses.  So the main search never proves a specific count;
+ * probing for one (a separate forced search) is slow and, for the common
+ * beyond-horizon case, only yields an imprecise "N+".  We just report
+ * that the board is dead - the partner's own search gives the count when
+ * it matters. */
+
+static int toldOppDead = 0;      /* sent "Opp dead" this game */
+static int toldIDead = 0;        /* sent "I dead" this game */
+
+static void declareBoardDead(int bestValue)
+   {
+   if (currentRules != BUGHOUSE) return;
+
+   if ((bestValue >= MATE) && (!toldOppDead))
+   {
+   toldOppDead = 1;
+   output("tellics ptell Opp dead\n");
+   }
+   else if ((bestValue <= -MATE) && (!toldIDead))
+   {
+   toldIDead = 1;
+   output("tellics ptell I dead\n");
+   }
+   }
 
 void findMove(move *rightMove)
 {
@@ -2214,6 +2254,15 @@ void findMove(move *rightMove)
 
 	if (!guardSkipSearch) lastSearchScore = bestValue;
 
+	/* Announce "Opp dead" (we're going to mate our opponent) or "I dead"
+	 * (we're going to get mated), from the proven mate score.  Must run
+	 * BEFORE the sit below: when mated we sit and block in pollForInput(),
+	 * so anything after the sit never runs.  Skipped on guardSkipSearch
+	 * (the "Mates Me" directive sit, which sits before searchRoot -
+	 * bestValue is stale there, and a directive is not a proven mate).
+	 * Fires once per game (told flags). */
+	if (!guardSkipSearch) declareBoardDead(bestValue);
+
 	/* Only for Bughouse */
 	if ((currentRules == BUGHOUSE) && (!guardSkipSearch)) 
 		
@@ -2351,11 +2400,11 @@ void findMove(move *rightMove)
 	}
 	else if (losingMaterial) 
 	{
-		output ("tellics ptell I sit (I am dead soon, I will lose material, tell me \"go\" to make a few moves)\n"); 
+		output ("tellics ptell I am dead soon, I will lose material, tell me \"go\" to make a few moves\ntellics ptell I sit\n"); 
 	}
 	else
 	{
-		output ("tellics ptell I sit (I am dead soon, tell me \"go\" to make a few moves)\n"); 
+		output ("tellics ptell I am dead soon, tell me \"go\" to make a few moves\ntellics ptell I sit\n"); 
 	}
 	sitting =1; 
 	parttoldsit = 0; /* one-shot request, consumed: a partner that
@@ -2558,4 +2607,5 @@ void resetAI()
   stopThought();
   forceDeepBugToMove();
   reSearch = 0;
+  toldOppDead = toldIDead = 0;   /* new game: our boards aren't dead yet */
 }

@@ -119,4 +119,10 @@ void tellPartnerDirectives();        /* Sunsetter's own piece
 							   * directives (request / withhold),
 							   * once per turn of our own */
 
+void resetPartnerDirectives();       /* on a new game, silently clear the
+							   * partner-directive state (lastSig + the
+							   * partner's partTake/partGuard/...) so a stale
+							   * set from the previous game is not
+							   * "retracted" (spurious nevermind / OK now) */
+
 #endif

@@ -63,7 +63,7 @@ void givePartnerHelp(const char *str)
 
   if(!strcasecmp(str, "intro")) {
     output("tellics ptell Hi.  Thanks for being my partner, I am Sunsetter.  Tell me \"help\" for the commands I understand, or \"help <command>\" for details on one.\n");
-    output("tellics ptell I understand these commands: sit, go, I sit (sitting/frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), I dead/Opp dead, help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.\n");
+    output("tellics ptell I understand these commands: sit, go, I sit (sitting/frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), I dead/Opp dead (I send these too), help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.\n");
     output("tellics ptell If I am going to get mated I sit for a piece (telling you so) - except when YOU are another Sunsetter sitting on your own, up on time, for a while: then I move instead, my captures feed you, and I sit on my next turn.\n");
   
   } else if(!strcasecmp(str, "sitting") || !strcasecmp(str, "frozen")) {
@@ -79,6 +79,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "dead")) {
     output("tellics ptell \"I dead\" (or \"I'm dead\"): your board is dead - no more pieces will come from it, so I stop counting on a drop for me and play fast to win (shorter thinking).\n");
     output("tellics ptell \"Opp dead\": your opponent's board is dead - I compare my clock against theirs (from \"time\"); if I'm ahead on time I sit, else I keep moving until I'm ahead, then sit.\n");
+    output("tellics ptell I send these myself too: if my opponent is mated soon I say \"Opp dead\"; if I'm mated soon I say \"I dead\" (no moves-to-mate count - my mate scores are material-based, so I don't probe for one).\n");
   } else if(!strcasecmp(str, "abort")) {
     output("tellics ptell \"abort\": I offer an abort (and accept yours).\n");
   } else if(!strcasecmp(str, "cancel")) {
@@ -96,7 +97,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "help")) {
     output("tellics ptell \"help\": the command list; \"help <command>\": details on that command, like this.\n");
   } else if(str[0] == '\0') {
-    output("tellics ptell I understand the following commands: sit, go, I sit (sitting/frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), I dead/Opp dead, help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.  \"help <command>\" gives details.\n");
+    output("tellics ptell I understand the following commands: sit, go, I sit (sitting/frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), I dead/Opp dead (I send these too), help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.  \"help <command>\" gives details.\n");
 
   } else {
     sprintf(buf, "tellics ptell Sorry, I don't have help on %s.  Tell me \"help\" for the command list.\n", str);
@@ -357,13 +358,35 @@ void tellPartnerClock()
  *           "-X" with "OK now" - the receiver understands both) and re-sends
  *           the new set ("x"/"cancel" = full reset also clears them).
  */
+static int lastSig = 0;	/* signature of the active directive set:
+			   * takeSet*32 + guard mask. Both are piece
+			   * bitmasks (bit (p-PAWN) set if "+p"/"-p" is
+			   * active; a rook also sets the queen - a queen
+			   * contains a rook). 0 = nothing sent.  Reset to 0
+			   * silently on a new game (resetPartnerDirectives): the
+			   * partner restarts, so a stale active set must not be
+			   * "retracted" (spurious nevermind / OK now). */
+
+/* Function: resetPartnerDirectives
+ * Input:    None
+ * Output:   None
+ * Purpose:  Silently clear the partner-directive state on a new game (no
+ *           "nevermind"/"OK now").  Resets our own sent-directive
+ *           signature (lastSig - so a stale set from the previous game is
+ *           not "retracted") and the partner's directives (partTake/
+ *           partGuard/partMatesMe/partMatesHim/partTrade - the partner
+ *           restarts, so its old ones are stale). */
+void resetPartnerDirectives()
+{
+  int i;
+  lastSig = 0;
+  partTrade = 0;
+  for (i = PAWN; i <= QUEEN; i++)
+     partTake[i] = partGuard[i] = partMatesMe[i] = partMatesHim[i] = 0;
+}
+
 void tellPartnerDirectives()
 {
-  static int lastSig = 0;	/* signature of the active directive set:
-					   * takeSet*32 + guard mask. Both are piece
-					   * bitmasks (bit (p-PAWN) set if "+p"/"-p" is
-					   * active; a rook also sets the queen - a queen
-					   * contains a rook). 0 = nothing sent */
   move aim[MAX_MOVES];
   int balance, requested, takeSet, hold, safe, p, guard, sig;
 
