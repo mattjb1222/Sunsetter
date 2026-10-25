@@ -37,6 +37,19 @@ int partnerClockKnown;   /* 1 if the partner told us it's clocks  */
  * setboard (the intro ptell arrives before it, see board.cpp) */
 int partnerIsSunsetter;
 
+/* 1 if the partner told us "I dead"/"I'm dead" (its board is dead):
+ * no more pieces will come from its board, so we don't count on
+ * drops (canSitByClock() is forced to 0) and we play fast to win
+ * (calcTimeToSpend caps the time budget).  Reset on "new"/"accept"/
+ * a partner change. */
+int partnerDead;
+
+/* 1 if the partner told us "Opp dead" (its opponent's board is
+ * dead): sit when we're ahead on time over that opponent, else
+ * move until we are (partnerOppDeadSit).  Reset on "new"/"accept"
+ * / a partner change. */
+int partOppDead;
+
 /* Function: givePartnerHelp
  * Input:    An argument
  * Output:   None
@@ -50,11 +63,11 @@ void givePartnerHelp(const char *str)
 
   if(!strcasecmp(str, "intro")) {
     output("tellics ptell Hi.  Thanks for being my partner, I am Sunsetter.  Tell me \"help\" for the commands I understand, or \"help <command>\" for details on one.\n");
-    output("tellics ptell I understand these commands: sit, go, sitting (frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.\n");
+    output("tellics ptell I understand these commands: sit, go, I sit (sitting/frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), I dead/Opp dead, help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.\n");
     output("tellics ptell If I am going to get mated I sit for a piece (telling you so) - except when YOU are another Sunsetter sitting on your own, up on time, for a while: then I move instead, my captures feed you, and I sit on my next turn.\n");
   
   } else if(!strcasecmp(str, "sitting") || !strcasecmp(str, "frozen")) {
-    output("tellics ptell \"sitting\" (or \"frozen\"): tells me you are sitting.  I note it (while you sit, only my moves can feed you pieces) and I get up from my own sit. \n");
+    output("tellics ptell \"I sit\" (or \"sitting\"/\"frozen\"): tells me you are sitting - no more pieces will come from your board until you make a move (I detect that when you drop on my board, or when your holding changes).  I note it (while you sit, only my moves can feed you pieces) and I get up from my own sit. \n");
   } else if(!strcasecmp(str, "sit")) {
     output("tellics ptell \"sit\": I stop moving and sit, waiting for your \"go\" or for a piece to drop for me - even if I am behind on time or not even mated.  One \"sit\" is one sit; say it again if you want me to keep sitting.  A pending one is retracted by \"go\", \"x\" or \"cancel\". \n");
   } else if(!strcasecmp(str, "go")) {
@@ -63,6 +76,9 @@ void givePartnerHelp(const char *str)
     output("tellics ptell \"flag\": I flag my opponent on my board.  I usually auto-flag when my clock runs out, but say it if you want to be sure.\n");
   } else if(!strcasecmp(str, "time")) {
     output("tellics ptell \"time <your clock> <your opponents clock>\" (1/100th seconds): tells me your board's clocks so I know when I am up on time.  When my icsdrone relays the server's clocks to me this is redundant but harmless.\n");
+  } else if(!strcasecmp(str, "dead")) {
+    output("tellics ptell \"I dead\" (or \"I'm dead\"): your board is dead - no more pieces will come from it, so I stop counting on a drop for me and play fast to win (shorter thinking).\n");
+    output("tellics ptell \"Opp dead\": your opponent's board is dead - I compare my clock against theirs (from \"time\"); if I'm ahead on time I sit, else I keep moving until I'm ahead, then sit.\n");
   } else if(!strcasecmp(str, "abort")) {
     output("tellics ptell \"abort\": I offer an abort (and accept yours).\n");
   } else if(!strcasecmp(str, "cancel")) {
@@ -70,7 +86,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
     output("tellics ptell \"+P\" to \"++Q\": try to take an enemy P (feed me a P).  \"-Q\" to \"--Q\": protect my Q - I move it to safety / refuse to trade it.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until reset - \"+X\" by \"nevermind\", \"-X\" by \"OK now\", both by \"cancel\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.\n");
     output("tellics ptell After a \"-Q\": add \"Mates Me\" and if I can't save the Q I sit and tell you it's coming - tell me \"go\" to make moves anyway.  After a \"+X\": \"Mates Him\" = I sacrifice material to take the X.  A pawn guard (\"-P\") with \"Mates Me\" also covers my bishop and queen (\"-P\" -> \"-B\" \"-Q\"); a pawn take (\"+P\") with \"Mates Him\" also covers them (\"+P\" -> \"+B\" \"+Q\").\n");
-    output("tellics ptell I send these directives myself, once a turn: \"+X\" = I am losing BECAUSE I am down about an X in material (losing by more than I am down is positional - I don't ask then) - feed me an X (one-time: it resets itself once you have taken the X; a rook also pulls in a queen - a queen is a rook and more); \"-X\" = protect an X of mine that is bad for you to take (an enemy piece can net it), or withhold an X (it would hang on my board) - a rook also implies a queen.  I send them bare - without \"Mates Me/Him\": a material request is not a mate claim (send ME \"Mates Me/Him\" to strengthen a directive, see there).  When I cancel a \"+X\" request (no longer needed) I say \"nevermind\"; when a \"-X\" threat is resolved (the piece is safe again) I say \"OK now\".  When I get your \"+X\" I ack \"OK\" and say I will take/drop it (\"++X\" -> \"OK, I will trade more\"); for \"-X\" I ack I will protect it (\"--X\" -> \"OK, I will avoid trading\").\n");
+    output("tellics ptell I send these directives myself, once a turn: \"+X\" = I am losing BECAUSE I am down about an X in material (losing by more than I am down is positional - I don't ask then) - feed me an X (one-time: it resets itself once you have taken the X; a rook also pulls in a queen - a queen is a rook and more); \"-X\" = protect an X of mine that is bad for you to take (an enemy piece can net it), or withhold an X (it would hang on my board) - a rook also implies a queen.  I send them bare - without \"Mates Me/Him\": a material request is not a mate claim (send ME \"Mates Me/Him\" to strengthen a directive, see there).  When I cancel a \"+X\" request (no longer needed) I say \"nevermind\"; when a \"-X\" threat is resolved (the piece is safe again) I say \"OK now\".  When I get your \"+X\" (feed me a piece) I say I will try to take it (no \"OK\"); for the standing ones I ack \"OK\" (\"++X\" -> \"OK, I will trade more\"), and for \"-X\" I ack \"OK\" I will protect it (\"--X\" -> \"OK, I will avoid trading\").\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
     output("tellics ptell \"nevermind\": cancel the \"+X\" requests (\"feed me a piece\" - I stop trying to take them).  \"OK now\": cancel the \"-X\" protections (\"protect my piece\" - the piece is safe again, I stop guarding it).  \"cancel\"/\"x\": the full reset - both, plus retract a pending \"sit\" before I sat (I keep moving) and reset the trading directive.  None of them gets me up (use \"go\" for that).\n");
   } else if(!strcasecmp(str, "mates")) {
@@ -80,7 +96,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "help")) {
     output("tellics ptell \"help\": the command list; \"help <command>\": details on that command, like this.\n");
   } else if(str[0] == '\0') {
-    output("tellics ptell I understand the following commands: sit, go, sitting (frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.  \"help <command>\" gives details.\n");
+    output("tellics ptell I understand the following commands: sit, go, I sit (sitting/frozen), time, flag, abort, cancel, x, nevermind (cancel +X), OK now (cancel -X), I dead/Opp dead, help, Mates Me/Him and piece directives (+P, -Q, ++, ----).  If you tell me a move (\"Qf3\", or a drop \"Qh8\") I will play it.  \"help <command>\" gives details.\n");
 
   } else {
     sprintf(buf, "tellics ptell Sorry, I don't have help on %s.  Tell me \"help\" for the command list.\n", str);
@@ -153,6 +169,13 @@ int canSitByClock()
    {
    int ours, theirs;
 
+   /* The partner is dead ("I dead"): no pieces will ever come from
+    * its board, so a win that only exists with a dropped piece can
+    * never materialize - don't search ghosts (and play fast to win;
+    * see calcTimeToSpend). */
+   if (partnerDead)
+      return 0;
+
    ours = boardClock(gameBoard.getDeepBugColor());
    theirs = boardClock(otherColor(gameBoard.getDeepBugColor()));
 
@@ -224,6 +247,36 @@ int partnerSittingLong()
    if ((!partnerIsSunsetter) || (!partsitting) || (!partnerClockKnown))
       return 0;
    if ((psittinglong < 5) || (partnerTime <= partOppTime))
+      return 0;
+
+   return 1;
+   }
+
+
+/*
+ * Function: partnerOppDeadSit
+ * Input:    None
+ * Output:   1 if we should sit for "Opp dead" (the partner's
+ *          opponent is dead and we are ahead on time over it),
+ *          0 otherwise
+ * Purpose:  "Opp dead" (the partner told us its opponent's board is
+ *          dead): compare our clock against that opponent's clock
+ *          (partOppTime) - if we're up on time we sit, else we keep
+ *          moving until we're up on time over it.  findMove() calls
+ *          this every turn, so the "move until up on time" part is
+ *          handled by re-checking each turn (our clock vs partOppTime
+ *          changes as the clocks run).  Needs the partner's clocks
+ *          known (partOppTime) to make the comparison.  boardClock()
+ *          is file-local here (the running-clock-accurate read).
+ */
+
+int partnerOppDeadSit()
+   {
+   if ((!partOppDead) || (!partnerClockKnown))
+      return 0;
+
+   /* Move until we're ahead on time over the partner's opponent */
+   if (boardClock(gameBoard.getDeepBugColor()) <= partOppTime)
       return 0;
 
    return 1;
@@ -467,28 +520,34 @@ static int parsePartnerDirective(const char *tok)
   if (tok[0] == '+') partTake[p] = n;
   else partGuard[p] = n;
 
-  /* Acknowledge: "OK" + what I will do for the directive (bot-vs-bot
-   * coordination - the partner knows I got it and how I'll act). */
+  /* Acknowledge what I will do for the directive (bot-vs-bot
+   * coordination - the partner knows I got it and how I'll act).  The
+   * standing ones ("++X" trade more / "--X" avoid / "-X" protect) lead
+   * with "OK"; the one-time "+X" (feed me a piece) is bare - just what
+   * I'll do, no "OK". */
   {
   char buf[MAX_STRING];
   static const char *pl[PIECES] = { 0, "pawn", "rook", "knight", "bishop", "queen" };
 
-  output("tellics ptell OK\n");
-  if (tok[0] == '+')
+  if ((tok[0] == '+') && (n == 1))
   {
-     if (n == 2)
-        sprintf(buf, "tellics ptell I will trade more\n");
-     else
-        sprintf(buf, "tellics ptell I will try to take an enemy %s and drop it for you\n", pl[p]);
+     sprintf(buf, "tellics ptell I will try to take an enemy %s\n", pl[p]);
+     output(buf);
   }
   else
   {
-     if (n == 2)
-        sprintf(buf, "tellics ptell I will avoid trading\n");
+     output("tellics ptell OK\n");
+     if (tok[0] == '+')
+        sprintf(buf, "tellics ptell I will trade more\n");
      else
-        sprintf(buf, "tellics ptell I will protect my %s (move it to safety / refuse to trade it)\n", pl[p]);
+     {
+        if (n == 2)
+           sprintf(buf, "tellics ptell I will avoid trading\n");
+        else
+           sprintf(buf, "tellics ptell I will protect my %s (move it to safety / refuse to trade it)\n", pl[p]);
+     }
+     output(buf);
   }
-  output(buf);
   }
   return 1;
 }
@@ -560,6 +619,28 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
     return 1;
   }
 
+  /* Board-status ptells (bughouse).  "I dead"/"I'm dead" (arg1 =
+   * "i"/"im"/"i'm" + arg2 = "dead", or "I am dead"): the partner's
+   * board is dead - no more pieces will come from it, so we stop
+   * counting on drops (canSitByClock -> 0) and play fast to win
+   * (calcTimeToSpend caps the time budget).  "Opp dead" (arg1 =
+   * "opp" + arg2 = "dead"): the partner's OPPONENT is dead - sit when
+   * we're ahead on time over it, else move until we are
+   * (partnerOppDeadSit, checked every turn in findMove). */
+  {
+  const char *subj = NULL;
+
+  if (!strcasecmp(arg2, "dead")) subj = arg1;
+  else if ((!strcasecmp(arg1, "i")) && (!strcasecmp(arg2, "am")) && (!strcasecmp(arg3, "dead"))) subj = arg1;
+
+  if (subj)
+  {
+  if (!strcasecmp(subj, "opp")) partOppDead = 1;
+  else if ((!strcasecmp(subj, "i")) || (!strcasecmp(subj, "im")) || (!strcasecmp(subj, "i'm"))) partnerDead = 1;
+  return 1;
+  }
+  }
+
   toldMove = gameBoard.algebraicMoveToDBMove(arg1);
 
   /* A drop in bughouse, three-way (a relayed partner drop can never
@@ -589,6 +670,7 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
   gameBoard.applyPartnerDrop(toldMove);
   stopThought();
   if (sitting) unsit(); /* the drop made our board playable */
+  partsitting = 0;   /* the partner made a move (dropped) - no longer sitting */
   /* startSearchOver(): the position changed mid-turn, so whatever
    * search result we had (an aborted pass, or a pre-sit best move
    * - main plays a non-bad rightMove as-is, without an isLegal
@@ -606,7 +688,12 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
   }
   }
   else if(!toldMove.isBad()) doMove(toldMove);  
-  else if(!strcasecmp(arg1, "sitting") || !strcasecmp(arg1, "frozen")) { partsitting = 1;  unsit();}
+  else if(!strcasecmp(arg1, "sitting") || !strcasecmp(arg1, "frozen")
+          || ((!strcasecmp(arg1, "i")) && (!strcasecmp(arg2, "sit"))))
+  { partsitting = 1;  unsit(); }  /* "I sit" / "sitting" / "frozen": the partner
+                                    sits (no more pieces come from its board until
+                                    it makes a move - see the holding-report / drop
+                                    handling that clears partsitting) */
   /* A partner request to sit is obeyed: parttoldsit makes
    * findMove() sit - even if we aren't mated or aren't up on time
    * (even when we are not mated at all).  A "go"
@@ -614,7 +701,7 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
    * "go"/"cancel"/"x" drops the request; the request is
    * one-shot (consumed when we sit), so a partner that
    * wants a long sit simply says "sit" again.  We say nothing here
-   * (no ptell flood); findMove() says "sitting" when it actually
+   * (no ptell flood); findMove() says "I sit" when it actually
    * sits. */
   else if(!strcasecmp(arg1, "sit")) { parttoldsit = 1; stopThought(); } 
   else if(!strcasecmp(arg1, "go")) { parttoldgo = 1; parttoldsit = 0; unsit(); stopThought(); } 

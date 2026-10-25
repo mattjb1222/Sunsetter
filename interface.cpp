@@ -773,6 +773,7 @@ void parseOption(const char *str)
 		partnerClockKnown = 0;   /* We don't know the partners
 				    clocks until it tells us */
 		partnerIsSunsetter = 0;   /* new game, new partner? */
+		partnerDead = partOppDead = 0;   /* new game: not dead yet */
 		gameInProgress = 0;   /* Also the bughouse soft reset
 				    between games (icsdrone sends "new" instead
 				    of killing us): don't play anything until
@@ -845,6 +846,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          strcpy(partnerName, "");
          partner = 0;
 		partnerIsSunsetter = 0;
+		partnerDead = partOppDead = 0;
          output("tellics set formula f4 && f2\n");
          }
       else if (strcmp(partnerName, arg[1]) != 0) 
@@ -1121,12 +1123,16 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          int otherColor = (ourColor == WHITE) ? BLACK : WHITE;
          int counts1[PIECES], counts2[PIECES], p;
          int changed = 0;
+         int partnerSide = 0;   /* arg[1] (our droppable) changed = the partner
+                                 captured a piece = the partner made a move (see
+                                 the note below: "our side: the partner
+                                 captured") - it is no longer sitting */
          for (p = PAWN; p <= QUEEN; p++) { counts1[p] = 0; counts2[p] = 0; }
          parseHoldingList(arg[1], counts1);
          parseHoldingList(arg[2], counts2);
          for (p = PAWN; p <= QUEEN; p++)
             {
-            if (gameBoard.getPieceInHand(ourColor, p) != counts1[p]) changed = 1;
+            if (gameBoard.getPieceInHand(ourColor, p) != counts1[p]) { changed = 1; partnerSide = 1; }
             if (gameBoard.getPieceInHand(otherColor, p) != counts2[p]) changed = 1;
             }
          if (changed)
@@ -1148,6 +1154,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
              * (the server re-sends on sync events) from re-searching. */
             stopThought();
             if (sitting) unsit();
+            if (partnerSide) partsitting = 0;   /* the partner made a move (captured) - no longer sitting */
             startSearchOver();
             /* Re-evaluate our own piece directives against the FRESH hand:
              * tellPartnerDirectives() at turn start may have decided on a
@@ -1236,6 +1243,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       gameBoard.setDeepBugColor(gameBoard.getColorOnMove());
       stopThought();
       if (sitting) unsit(); /* the drop made our board playable */
+      partsitting = 0;   /* the partner made a move (dropped on our board) - no longer sitting */
       startSearchOver();
       return;
       }

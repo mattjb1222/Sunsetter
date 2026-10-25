@@ -299,6 +299,11 @@ void calcTimeToSpend()
 		if (millisecondsPerMove > 1500) millisecondsPerMove = 1500;
 		if (millisecondsPerMove < 300) millisecondsPerMove = 300;
 		if (mytime <= 900) { millisecondsPerMove = mytime / 6; }
+		/* "I dead" (partnerDead): the partner can't feed us any more,
+		 * so push the win quickly - cap the thinking budget to play
+		 * fast (a win that needs a drop can never materialize, so we
+		 * search the real position, fast) */
+		if (partnerDead && (millisecondsPerMove > 300)) millisecondsPerMove = 300;
 	}
 
 	else 
@@ -2189,7 +2194,7 @@ void findMove(move *rightMove)
 	{
 	int pn2 = gtype - PAWN;
 	pn[0] = "PRNBQ"[pn2]; pn[1] = '\0';
-	output ("tellics ptell sitting (the ");
+	output ("tellics ptell I sit (the ");
 	output (pn);
 	if (partMatesMe[gtype]) output (" is about to be taken, tell me \"go\" to make moves)\n");
 	else output (" is coming, tell me \"go\" to make moves)\n");
@@ -2283,11 +2288,17 @@ void findMove(move *rightMove)
 	 * else to do) */
 	int keepToMove = partnerSittingLong();
 
+	/* "Opp dead" (the partner's opponent is dead): sit when we're
+	 * ahead on time over it, else move until we are (re-checked
+	 * every turn, see partnerOppDeadSit) */
+	int wantSit = partnerOppDeadSit();
+
 	if (((!sitting)
 	  && ((rightMove->isBad() && (bestValue <= -MATE))
 	      || ((bestValue <= -MATE) && (!toldPartGoThisTurn)
 	          && (!keepToMove))
-	      || obeyPartSit))
+	      || obeyPartSit
+	      || wantSit))
 	  && (currentRules == BUGHOUSE)) 
 
 	{ 
@@ -2327,20 +2338,24 @@ void findMove(move *rightMove)
 
 	if (rightMove->isBad()) 
 	{
-		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
-		output ("tellics ptell sitting (I am mated)\ntellics ptell go\n"); 
+		output ("tellics ptell I sit (I am mated)\ntellics ptell go\n"); 
+		output ("tellics ptell I sit (I am mated)\ntellics ptell go\n"); 
+	}
+	else if (wantSit) 
+	{
+		output ("tellics ptell I sit (my opponent is dead, I'm up on time)\n"); 
 	}
 	else if (obeyPartSit && (bestValue > -MATE)) 
 	{
-		output ("tellics ptell sitting (partner told me to sit)\n"); 
+		output ("tellics ptell I sit (partner told me to sit)\n"); 
 	}
 	else if (losingMaterial) 
 	{
-		output ("tellics ptell sitting (I am dead soon, I will lose material, tell me \"go\" to make a few moves)\n"); 
+		output ("tellics ptell I sit (I am dead soon, I will lose material, tell me \"go\" to make a few moves)\n"); 
 	}
 	else
 	{
-		output ("tellics ptell sitting (I am dead soon, tell me \"go\" to make a few moves)\n"); 
+		output ("tellics ptell I sit (I am dead soon, tell me \"go\" to make a few moves)\n"); 
 	}
 	sitting =1; 
 	parttoldsit = 0; /* one-shot request, consumed: a partner that
@@ -2485,7 +2500,7 @@ void startSearchOver()
 void sit()
 {
   sitting = 1;
-  output("tellics ptell sitting\n");
+  output("tellics ptell I sit\n");
 }
 
 /* Function: unsit

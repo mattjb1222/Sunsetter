@@ -95,11 +95,24 @@ extern int partnerClockKnown;      /* 1 if the partner told us it's
 							  clocks */
 extern int partnerIsSunsetter;    /* 1 if the partner is another
 				  Sunsetter (bot-vs-bot coordination) */
+extern int partnerDead;         /* 1 if the partner told us "I (am) dead":
+				  no more pieces will come from its board -
+				  don't count on drops, play fast to win */
+extern int partOppDead;         /* 1 if the partner told us "Opp dead"
+				  (its opponent is dead): sit when ahead on
+				  time over that opponent, else move until
+				  we are (see partnerOppDeadSit) */
 
 int partnerSittingLong();         /* 1 if our partner (another
 				  Sunsetter) is sitting on his own for a
 				  while and up on time - we move instead
 				  of sitting (see partner.cpp) */
+
+int partnerOppDeadSit();         /* 1 if we should sit for "Opp dead":
+				  the partner's opponent is dead and we're
+				  ahead on time over it - we sit; the caller
+				  re-checks each turn, so we move until we are
+				  (see partner.cpp) */
 
 
 void tellPartnerDirectives();        /* Sunsetter's own piece
