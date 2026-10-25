@@ -2055,11 +2055,12 @@ static int toldMoveIsLegal(move m)
 
 /* ---- Dead-board announcements to the partner (bughouse) ----
  *
- * If we're mated soon (bestValue <= -MATE) we tell the partner "I dead"
- * (our board is dying - no more pieces will come from it, play fast to
- * win); if our opponent is (bestValue >= +MATE) we say "Opp dead"
- * (their board is dying).  Sent once per game (toldOppDead/toldIDead,
- * reset in resetAI).
+ * If our opponent is mated soon (bestValue >= +MATE) we say "Opp dead"
+ * (their board is dying).  Sent once per game (toldOppDead, reset in
+ * resetAI).  We say "I dead" from findMove's sit block instead (tied to
+ * the actual sit, re-sent on sit-after-move - see there): sitting is now
+ * clock-dependent (we sit only while ahead over the partner's opponent),
+ * so "I dead" must track the sit, not just the proven mate.
  *
  * We do NOT report a moves-to-checkmate count: in bughouse the terminal
  * mate score is material-based (-MATE_IN_ONE + bughouseMateEval(), see the
@@ -2071,7 +2072,7 @@ static int toldMoveIsLegal(move m)
  * it matters. */
 
 static int toldOppDead = 0;      /* sent "Opp dead" this game */
-static int toldIDead = 0;        /* sent "I dead" this game */
+static int toldIDead = 0;        /* sent "I dead" (cleared when we move, re-sent on the next sit) */
 
 static void declareBoardDead(int bestValue)
    {
@@ -2082,11 +2083,7 @@ static void declareBoardDead(int bestValue)
    toldOppDead = 1;
    output("tellics ptell Opp dead\n");
    }
-   else if ((bestValue <= -MATE) && (!toldIDead))
-   {
-   toldIDead = 1;
-   output("tellics ptell I dead\n");
-   }
+   /* "I dead" is sent from findMove's sit block (tied to the actual sit) */
    }
 
 void findMove(move *rightMove)
@@ -2305,16 +2302,17 @@ void findMove(move *rightMove)
 	 * left (checkmated, bad rightMove) we always sit for a piece:
 	 * that's the only way to continue, and the server (e.g.
 	 * Lichess) auto-sits a checkmated player, so our clock
-	 * correctly stops.  With legal moves left we sit too whenever
-	 * the mate is proven, regardless of the clocks: sitting keeps
-	 * material and lets our partner feed us the piece that breaks
-	 * the mate (our clock runs too while we sit - the server
-	 * stops it only for a checkmated player - that bleed is the
-	 * deliberate price of the sit; canSitByClock() now only gates
-	 * the ghost-piece search, not sitting).  When our partner
-	 * told us "go" (toldPartGoThisTurn) we make one move even
-	 * though we get mated: our captures feed the partner, and the
-	 * opponent might miss the mate.  Bot-vs-bot exception
+	 * correctly stops.  With legal moves left we sit for the mate
+	 * only while we are AHEAD on time over our partner's opponent
+	 * (matedSitClockOK, re-checked every turn): we bank time and
+	 * tell the partner "I dead" so the (winning) partner finishes
+	 * the game; when our clock falls to or below the partner's
+	 * opponent we MOVE instead (delay our own mate, our captures
+	 * feed the partner).  A partner "go" no longer forces a move
+	 * while we are ahead on time (toldPartGoThisTurn is ignored
+	 * here - we bank time and sit; it only gets us moving when we
+	 * are BEHIND on time, to feed the partner).  Bot-vs-bot
+	 * exception
 	 * (partnerSittingLong): if our partner is ANOTHER Sunsetter
 	 * (identified itself in the intro ptell), is sitting on his
 	 * own for an extended period and is up on time, we do NOT
@@ -2342,10 +2340,16 @@ void findMove(move *rightMove)
 	 * every turn, see partnerOppDeadSit) */
 	int wantSit = partnerOppDeadSit();
 
+	/* Mated with legal moves left: sit (bank time, "I dead") only
+	 * while ahead on time over the partner's opponent, else move
+	 * (delay the mate, feed pieces); re-checked every turn */
+	int matedSit = matedSitClockOK();
+
 	if (((!sitting)
 	  && ((rightMove->isBad() && (bestValue <= -MATE))
-	      || ((bestValue <= -MATE) && (!toldPartGoThisTurn)
-	          && (!keepToMove))
+	      || ((bestValue <= -MATE)
+	          && (!keepToMove)
+	          && (matedSit))
 	      || obeyPartSit
 	      || wantSit))
 	  && (currentRules == BUGHOUSE)) 
@@ -2406,6 +2410,15 @@ void findMove(move *rightMove)
 	{
 		output ("tellics ptell I am dead soon, tell me \"go\" to make a few moves\ntellics ptell I sit\n"); 
 	}
+	/* We are sitting and mated: tell the partner "I dead" (no more
+	 * pieces come from our board, play fast to win).  Sent on every
+	 * sit after a move (toldIDead is cleared below when we move), so
+	 * the partner tracks our dead<->alive state. */
+	if ((bestValue <= -MATE) && (!toldIDead)) 
+	{
+		toldIDead = 1;
+		output("tellics ptell I dead\n");
+	}
 	sitting =1; 
 	parttoldsit = 0; /* one-shot request, consumed: a partner that
 	                    wants a long sit says "sit" again; a "go"
@@ -2416,9 +2429,14 @@ void findMove(move *rightMove)
     else 
 
 	{ 
-		/* Mated soon but keeping to move: the partner told us
-		 * "go" this turn (make exactly one move - our captures
-		 * feed the partner, the opponent might miss the mate),
+		/* We are moving while mated (behind on time over the partner's
+		 * opponent, or the bot-vs-bot feed): we are not dead/sitting
+		 * anymore - re-arm "I dead" for the next sit.  A partner "go"
+		 * only gets us here when we are BEHIND on time (when we're
+		 * ahead we sit above, regardless of the "go"). */
+		if (bestValue <= -MATE) toldIDead = 0;
+		/* Mated soon but keeping to move: we are behind on time over
+		 * the partner's opponent (catch up on the clock),
 		 * or a bot partner (another Sunsetter) is sitting on his
 		 * own, up on time (feed him with captures, sit on the
 		 * next turn).  Tell our partner to sit (so we get pieces)
@@ -2485,8 +2503,11 @@ endOfFindMove:
 
   /* Our part is sitting on his own.  If he does that for more than
    * 5 moves I suggest to go (psittinglong keeps counting, so it
-   * stays >= 5 for the whole long sit; canSitByClock uses that) */
-  if (partsitting && !toldparttosit) { psittinglong ++; if ((psittinglong == 6) && !toldpartisit) output ("tellics ptell go (watch our time)\n"); }
+   * stays >= 5 for the whole long sit; canSitByClock uses that).
+   * Never for a DEAD partner (partnerDead, "I dead"): we want the
+   * dead partner to keep sitting (bank time, so we can win) - a
+   * "go" would get him up (break his sit, delay his mate) */
+  if (partsitting && !toldparttosit && !partnerDead) { psittinglong ++; if ((psittinglong == 6) && !toldpartisit) output ("tellics ptell go (watch our time)\n"); }
   else { psittinglong = 0; } 	
   
   if (toldpartisit) {unsit ();}

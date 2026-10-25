@@ -79,7 +79,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "dead")) {
     output("tellics ptell \"I dead\" (or \"I'm dead\"): your board is dead - no more pieces will come from it, so I stop counting on a drop for me and play fast to win (shorter thinking).\n");
     output("tellics ptell \"Opp dead\": your opponent's board is dead - I compare my clock against theirs (from \"time\"); if I'm ahead on time I sit, else I keep moving until I'm ahead, then sit.\n");
-    output("tellics ptell I send these myself too: if my opponent is mated soon I say \"Opp dead\"; if I'm mated soon I say \"I dead\" (no moves-to-mate count - my mate scores are material-based, so I don't probe for one).\n");
+    output("tellics ptell I send these myself too: if my opponent is mated soon I say \"Opp dead\" (you sit when ahead on time over it).  If I am mated I sit (and say \"I dead\") ONLY while I am ahead on time over your opponent's clock (from \"time\"): I bank time and you win; when my clock falls to/below yours I move (delay my mate, my captures feed you) and sit again when I'm ahead - so a dead partner that is losing on time keeps moving (count on its captures), one winning on time sits.  (No moves-to-mate count - my mate scores are material-based, so I don't probe for one.)\n");
   } else if(!strcasecmp(str, "abort")) {
     output("tellics ptell \"abort\": I offer an abort (and accept yours).\n");
   } else if(!strcasecmp(str, "cancel")) {
@@ -281,6 +281,36 @@ int partnerOppDeadSit()
       return 0;
 
    return 1;
+   }
+
+
+/*
+ * Function: matedSitClockOK
+ * Input:    None
+ * Output:   1 if, being mated, we should sit (bank time, wait for a
+ *          piece) rather than move, 0 if we should move (delay the
+ *          mate, feed pieces)
+ * Purpose:  Clock-dependent mated sit.  When our board is proven mated
+ *          we sit (and tell the partner "I dead") ONLY while we are
+ *          ahead on time over the partner's opponent (partOppTime): we
+ *          bank time and let the (winning) partner finish the game.  If
+ *          our clock falls to or below the partner's opponent we move
+ *          instead (delay our own mate, our captures feed the partner).
+ *          findMove() re-checks this every turn, so the sit<->move
+ *          switch happens as the clocks cross.  When the partner's
+ *          clocks are unknown we can't verify, so default to sitting
+ *          (the old clock-independent behavior).  boardClock() is
+ *          file-local here (the running-clock-accurate read).
+ */
+
+int matedSitClockOK()
+   {
+   if (!partnerClockKnown)
+      return 1;
+
+   /* Sit (bank time) only while ahead over the partner's opponent; at
+    * or below it, move (delay the mate, feed pieces) */
+   return (boardClock(gameBoard.getDeepBugColor()) > partOppTime);
    }
 
 
@@ -693,7 +723,7 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
   gameBoard.applyPartnerDrop(toldMove);
   stopThought();
   if (sitting) unsit(); /* the drop made our board playable */
-  partsitting = 0;   /* the partner made a move (dropped) - no longer sitting */
+  partsitting = 0; partnerDead = 0;   /* the partner made a move (dropped) - no longer sitting (or dead) */
   /* startSearchOver(): the position changed mid-turn, so whatever
    * search result we had (an aborted pass, or a pre-sit best move
    * - main plays a non-bad rightMove as-is, without an isLegal

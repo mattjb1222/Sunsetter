@@ -1169,7 +1169,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
              * (the server re-sends on sync events) from re-searching. */
             stopThought();
             if (sitting) unsit();
-            if (partnerSide) partsitting = 0;   /* the partner made a move (captured) - no longer sitting */
+            if (partnerSide) { partsitting = 0; partnerDead = 0; }   /* the partner made a move (captured) - no longer sitting (or dead) */
             startSearchOver();
             /* Re-evaluate our own piece directives against the FRESH hand:
              * tellPartnerDirectives() at turn start may have decided on a
@@ -1258,7 +1258,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       gameBoard.setDeepBugColor(gameBoard.getColorOnMove());
       stopThought();
       if (sitting) unsit(); /* the drop made our board playable */
-      partsitting = 0;   /* the partner made a move (dropped on our board) - no longer sitting */
+      partsitting = 0; partnerDead = 0;   /* the partner made a move (dropped on our board) - no longer sitting (or dead) */
       startSearchOver();
       return;
       }

@@ -114,6 +114,13 @@ int partnerOppDeadSit();         /* 1 if we should sit for "Opp dead":
 				  re-checks each turn, so we move until we are
 				  (see partner.cpp) */
 
+int matedSitClockOK();          /* 1 if, being mated, we should sit (bank
+				  time) rather than move: we are ahead on time over
+				  the partner's opponent (partOppTime), or its clocks
+				  are unknown (can't verify, default to sitting).  When
+				  we are behind (or level) we move - delay the mate,
+				  feed pieces (see partner.cpp) */
+
 
 void tellPartnerDirectives();        /* Sunsetter's own piece
 							   * directives (request / withhold),
