@@ -555,7 +555,20 @@ static int parsePartnerDirective(const char *tok)
   if ((tok[0] != '+') && (tok[0] != '-')) return 0;
   while ((tok[n] == tok[0]) && (tok[n] != '\0')) n++;
   if (n > 4) n = 4;
-  if (tok[n] == '\0') { partTrade = (tok[0] == '+') ? n : -n; return 1; }
+  if (tok[n] == '\0')
+  {
+  partTrade = (tok[0] == '+') ? n : -n;
+  /* Acknowledge (bot-vs-bot coordination, like the piece directives
+   * below - the self-description promises "for the standing ones I
+   * ack OK", and a bare ++/-- is a standing directive): the partner
+   * knows I got it and will act on it (order_moves orders
+   * equal-value trades by partTrade).  The early return below must
+   * NOT skip this - that is why bare ++/-- were never acknowledged. */
+  output("tellics ptell OK\n");
+  output((partTrade > 0) ? "tellics ptell I will trade more\n"
+                        : "tellics ptell I will avoid trading\n");
+  return 1;
+  }
   if (tok[n + 1] != '\0') return 0;
   p = tok[n];
   if ((p >= 'a') && (p <= 'z')) p -= 32;
