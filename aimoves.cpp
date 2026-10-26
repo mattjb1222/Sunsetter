@@ -674,6 +674,61 @@ int boardStruct::mateTries(move *m)
 	
 	  }
 
+/*
+ * Function: checkDropMoves
+ * Input:    An array to fill with moves.
+ * Output:   The number of moves generated.
+ * Purpose:  generates hand-piece drops that give check (contact checks
+ *          from the hand - every piece type dropped onto its contact-
+ *          attack squares around the enemy king) - used by quiesce() so
+ *          a drop-mate (e.g. Q@c2#) is seen even when the search is
+ *          truncated to quiesce depth (a captures-only quiesce would miss
+ *          it and rate a losing move as a win).  Unlike mateTries' drop
+ *          portion this has NO "uncapturable" gate: a capturable check-
+ *          drop is still forcing (the king must answer it), so quiesce
+ *          must consider it
+ */
+
+int boardStruct::checkDropMoves(move *m)
+   {
+   move *original;
+   bitboard unoccupied, attksquare, dest;
+   square to;
+
+   original = m;
+   unoccupied = (~(occupied[WHITE] | occupied[BLACK]));
+
+   if (hand[onMove][QUEEN])
+   {
+      attksquare = unoccupied & contactAttacksFrom(QUEEN, kingSquare[OFF_MOVE]);
+      while (attksquare.hasBits()) { to = firstSquare(attksquare.data); attksquare.unsetSquare(to); *m++ = move(IN_HAND, to, QUEEN); }
+   }
+   if (hand[onMove][ROOK])
+   {
+      attksquare = unoccupied & contactAttacksFrom(ROOK, kingSquare[OFF_MOVE]);
+      while (attksquare.hasBits()) { to = firstSquare(attksquare.data); attksquare.unsetSquare(to); *m++ = move(IN_HAND, to, ROOK); }
+   }
+   if (hand[onMove][KNIGHT])
+   {
+      attksquare = unoccupied & contactAttacksFrom(KNIGHT, kingSquare[OFF_MOVE]);
+      while (attksquare.hasBits()) { to = firstSquare(attksquare.data); attksquare.unsetSquare(to); *m++ = move(IN_HAND, to, KNIGHT); }
+   }
+   if (hand[onMove][BISHOP])
+   {
+      attksquare = unoccupied & contactAttacksFrom(BISHOP, kingSquare[OFF_MOVE]);
+      while (attksquare.hasBits()) { to = firstSquare(attksquare.data); attksquare.unsetSquare(to); *m++ = move(IN_HAND, to, BISHOP); }
+   }
+   if (hand[onMove][PAWN])
+   {
+      attksquare = unoccupied & pawnAttacksFrom(OFF_MOVE, kingSquare[OFF_MOVE]);
+      dest = attksquare & ~(FIRST_RANK | EIGHTH_RANK);
+      while (dest.hasBits()) { to = firstSquare(dest.data); dest.unsetSquare(to); *m++ = move(IN_HAND, to, PAWN); }
+   }
+
+   m->makeBad();
+   return m - original;
+   }
+
 /* 
  * Function: skippedMoves
  * Input:    An array to fill with moves.

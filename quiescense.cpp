@@ -141,12 +141,38 @@ assert (ply <= DEPTH_LIMIT);
 
    m = searchMoves[ply];
   
-   if (ply >= MAX_QUIESCE_SEARCH_DEPTH || (AIBoard.captureMoves(m)) == 0)
+   if (ply >= MAX_QUIESCE_SEARCH_DEPTH)
    {
 #ifdef GAMETREE
 	if ((tree_positionsSaved < GAMETREE) && (currentDepth == FIXED_DEPTH - 1)) 
 	{
-		fprintf(fi[ply],"<br>Return: no more captures or max depth<br></td></tr></table></html>\n");
+		fprintf(fi[ply],"<br>Return: max depth<br></td></tr></table></html>\n");
+		fclose(fi[ply]); }
+#endif 
+      return AIBoard.eval();
+   }
+
+   /* captures (bad sentinel left at m[ncap]) */
+   int ncap = AIBoard.captureMoves(m);
+
+   /* order the captures NOW, before the sentinel at m[ncap] is
+    * overwritten by the check-drops below; orderCaptures() counts up
+    * to the makeBad() sentinel, so it only touches the captures */
+   end = AIBoard.orderCaptures(m);
+
+   /* dropped pieces that give check (contact checks from the hand) are
+    * searched too: a drop-mate (e.g. Q@c2#) is invisible to a
+    * captures-only quiesce, so a losing move that walks into one would
+    * otherwise be rated as a win.  Appended after the captures
+    * (overwrites the sentinel at m[ncap], new sentinel at m[ncap+nchk]) */
+   int nchk = AIBoard.checkDropMoves(m + ncap);
+
+   if ((ncap + nchk) == 0)
+   {
+#ifdef GAMETREE
+	if ((tree_positionsSaved < GAMETREE) && (currentDepth == FIXED_DEPTH - 1)) 
+	{
+		fprintf(fi[ply],"<br>Return: no more captures or check-drops<br></td></tr></table></html>\n");
 		fclose(fi[ply]); }
 #endif 
       return AIBoard.eval();
@@ -154,9 +180,7 @@ assert (ply <= DEPTH_LIMIT);
 
    stats_quiescensePositionsSearched++;
       
-   best = AIBoard.eval(); 	
-
-   end = AIBoard.orderCaptures(m);
+   best = AIBoard.eval(); 		
 
    for (current = m; current < end; current++)
       {
@@ -194,6 +218,21 @@ assert (value <= INFINITY);
    
 		}
 		
+
+   
+   /* search the check-drops (appended after the captures, [m+ncap, m+ncap+nchk)) */
+   for (current = m + ncap; current < m + ncap + nchk; current++)
+      {
+	   if (best >= beta) break;
+	   if (best > alpha) alpha = best;
+		AIBoard.changeBoard(*current);
+		value = -quiesce(-beta, -alpha, ply + 1);
+		AIBoard.unchangeBoard();	
+		if (value > best) 
+		{
+			best = value;
+		}
+      }
 
    
 #ifdef GAMETREE

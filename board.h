@@ -613,6 +613,9 @@ struct boardStruct {
 												captures to a certain square */
   int mateTries(move *m);					/* fills an array of moves with 
 												contact checks which can't be taken*/
+  int checkDropMoves(move *m);				/* fills an array with hand drops
+												that give check (quiesce uses it so
+												a drop-mate is seen at quiesce depth) */
 
   int checkEvasionCaptures(move *m);		/* fills an array of with move that get
 												out of check */  
