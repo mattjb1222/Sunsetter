@@ -1166,11 +1166,38 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
              * holding change while waiting for the opponent is
              * harmless (reSearch is reset at the top of findMove).
              * The changed-check keeps resends of the same holding
-             * (the server re-sends on sync events) from re-searching. */
+             * (the server re-sends on sync events) from re-searching.
+             * EXCEPTION - proven-mate sit, up on time (matedSitClockOK):
+             * stay seated.  The holding change is a change to the
+             * *droppable pool* (search space), not a piece landing on
+             * our board (that is the drop sites below, which always
+             * unsit).  Waking here is what lost: the re-search with
+             * fresh drops can show a mate OUT OF HORIZON as a win
+             * (a quiet knight contact-check is invisible to quiesce),
+             * we get up and play the wrong drop, and get mated
+             * instead (droneB Oct 25).  NOTE: gating only unsit()
+             * would NOT keep us seated - startSearchOver() sets
+             * reSearch=1, which breaks the sit block (search.cpp
+             * while ((sitting) && (!reSearch))), and on the re-entered
+             * pass the sit condition (gated on !sitting) is false, so
+             * we fall to the else block and play anyway.  We re-search
+             * when we fall behind on time (matedSitClockOK is
+             * re-checked every turn) or when a drop for us / a told
+             * move wakes us - those are the real "board may now be
+             * playable" events. */
+            if ((sitting) && (matedSitClockOK()))
+            {
+            /* mated + ahead (or partner clocks unknown): stay seated
+             * (bank time).  Deliberately NO unsit() and NO
+             * startSearchOver() here (see above). */
+            }
+            else
+            {
             stopThought();
             if (sitting) unsit();
             if (partnerSide) { partsitting = 0; partnerDead = 0; }   /* the partner made a move (captured) - no longer sitting (or dead) */
             startSearchOver();
+            }
             /* Re-evaluate our own piece directives against the FRESH hand:
              * tellPartnerDirectives() at turn start may have decided on a
              * stale holding (this report can arrive mid-turn, after that
