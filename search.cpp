@@ -2289,7 +2289,7 @@ void findMove(move *rightMove)
 
 	// the move is not legal => we tried to drop a ghost-piece => sit for it
 	
-	if ((bestValue > -MATE) && (toldparttosit) && ((bestValue >= 0) || (partnerDead))) 
+	if ((bestValue > -MATE) && (toldparttosit) && ((bestValue >= 0) || (partnerDead) || partnerDownOnTime())) 
 	
 		{ 
 		output ("tellics ptell go\n"); 
@@ -2306,7 +2306,11 @@ void findMove(move *rightMove)
 	 * search; this is re-checked every turn, so the "go" goes out
 	 * on the first safe/attacking turn.  A DEAD partner (partnerDead)
 	 * can't keep sitting (checkmated board) - release the flag then
-	 * (the "go" is a no-op for a checkmated board) */
+	 * (the "go" is a no-op for a checkmated board).  A partner that
+	 * is DOWN on time (partnerDownOnTime) is released too, while we
+	 * are still in danger: its clock is stopped while it sits but
+	 * partOppTime keeps running, so the gap grows the longer it sits
+	 * - releasing it (go) stops the bleed */
 		
 	/* We are mated soon (mate in 1 included).  With no legal move
 	 * left (checkmated, bad rightMove) we always sit for a piece:

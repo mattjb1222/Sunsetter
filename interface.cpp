@@ -873,15 +873,56 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          strcpy(partnerName, arg[1]);
          partner = 1;
          if (strstr(arg[1], "Sunsetter")) partnerIsSunsetter = 1;
-		/* The usage ptell goes out AFTER the partnership is real,
-		 * not here: the "partner" command arrives when a pairing is
-		 * found (first game), before the partner is actually there -
-		 * re-arm partnerIntroSent; the first ptell we get back from
-		 * it (the ptell handler below) sends it */
+		/* The usage ptell goes out on "partnership" (icsdroneng
+		 * relays the server's partnership-confirmed message at game
+		 * start - see the partnership command below), or, with an
+		 * older icsdroneng that doesn't send it, on the FIRST ptell
+		 * we get back (the ptell handler below) - that proves the
+		 * partnership is real (the "partner" command arrives when a
+		 * pairing is found, before the partner is actually there).
+		 * Re-arm partnerIntroSent here */
 		partnerIntroSent = 0;
          output("tellics set formula f4 && f1 \n");
          output("tellics unseek\n");
          };
+      }
+   else if (!strcmp(arg[0], "partnership")) 
+      {
+      /* icsdroneng: the server's partnership-confirmed message
+       * ("X agrees to be your partner", or the offer it just
+       * accepted) was relayed - the partnership is REAL (icsdroneng
+       * sends this at game start, so the partner's game exists and
+       * the ptell below is deliverable - not at the pairing-found
+       * moment).  Normally the "partner" command already set
+       * partnerName; a differing name (or a missing "partner"
+       * command) is treated like a partner change.  Send the usage
+       * ptell - once per partnership (partnerIntroSent, re-armed by
+       * new/accept, a partner change and a partner removal).  An
+       * older icsdroneng without this command is covered by the
+       * first-ptell fallback in the ptell handler below */
+      if (arg[1][0]) 
+         {
+         char *realName = arg[1];
+         if (realName[0] == '\a') 
+            realName++;                        /* fics alarm char */
+         if ((!partner) || (strcmp(partnerName, realName) != 0))
+            {
+            strcpy(partnerName, realName);
+            partner = 1;
+            partnerIsSunsetter = 0;
+            if (strstr(realName, "Sunsetter")) partnerIsSunsetter = 1;
+            partnerDead = partOppDead = 0;
+            sprintf(buf, "tellics seek %s\n", partnerName);
+            output(buf);
+            output("tellics set formula f4 && f1 \n");
+            output("tellics unseek\n");
+            }
+         }
+      if (!partnerIntroSent)
+         {
+         partnerIntroSent = 1;
+         givePartnerHelp("intro");
+         }
       } 
    else if (!strcmp(arg[0], "?")) 
       {
@@ -1225,11 +1266,13 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       {
       partner = 1;                 /* We should have gotten "partner" before,
 									but just to make sure */
-      /* The usage ptell goes out on the FIRST ptell we get back from
-       * the partner - that proves the partnership is real (the
-       * "partner" command arrives earlier, when a pairing is found).
-       * Once per partnership: partnerIntroSent is re-armed by
-       * "new"/"accept", a partner change, a partner removal */
+      /* The usage ptell also goes out here as a FALLBACK trigger
+       * (with an older icsdroneng that doesn't send "partnership")
+       * - the first ptell we get back from the partner proves the
+       * partnership is real (the "partner" command arrives earlier,
+       * when a pairing is found).  Once per partnership:
+       * partnerIntroSent is re-armed by "new"/"accept", a partner
+       * change, a partner removal */
       if (!partnerIntroSent)
          {
          partnerIntroSent = 1;

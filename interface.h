@@ -105,8 +105,11 @@ extern int partOppDead;         /* 1 if the partner told us "Opp dead"
 
 extern int partnerIntroSent;     /* 1 if we already sent the usage
 					  ptell to the current partner (sent on the
-					  first ptell we get back from it, not at the
-					  "partner" command - see partner.cpp) */
+					  "partnership" command - icsdroneng's relay of the
+					  server's partnership-confirmed message - or,
+					  with an older icsdroneng, on the first ptell we
+					  get back; not at the "partner" command; see
+					  partner.cpp) */
 
 int partnerSittingLong();         /* 1 if our partner (another
 				  Sunsetter) is sitting on his own for a

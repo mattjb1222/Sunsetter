@@ -53,10 +53,14 @@ int partOppDead;
 /* 1 if we already sent the usage ptell (givePartnerHelp("intro"))
  * to the current partner.  NOT sent at the "partner" command (that
  * arrives when a pairing is found, first game, before the partner
- * is actually there): sent on the FIRST ptell we get back from the
- * partner (the ptell handler in interface.cpp) - that proves the
- * partnership is real.  Re-armed by "new"/"accept", a partner change
- * and a partner removal (interface.cpp) */
+ * is actually there): sent on the "partnership" command (icsdroneng
+ * relays the server's partnership-confirmed message - "X agrees to
+ * be your partner" / the offer it just accepted - at game start,
+ * when the partner's game exists) - or, with an older icsdroneng
+ * that doesn't send it, on the first ptell we get back from the
+ * partner (the ptell handler in interface.cpp).  Re-armed by
+ * "new"/"accept", a partner change and a partner removal
+ * (interface.cpp) */
 int partnerIntroSent;
 
 /* Function: givePartnerHelp
