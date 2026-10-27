@@ -225,6 +225,12 @@ int boardStruct::captureGain(color c, move m)
       attacks */
   
    gain[0] = pValue[position[to]];
+   /* A captured *promoted* piece is only worth its seed pawn to the
+      side that gets it (bughouse: it goes to the holder's holding -
+      shared with the partner; crazyhouse: ZHChangeBoard() puts a
+      pawn, not the piece, in the capturer's hand) */
+   if ((position[to] != NONE) && (promotedPawns.squareIsSet(to)))
+      gain[0] = pValue[PAWN];
    attackedValue = pValue[position[from]];
    attacks.unsetSquare(from);
    sign = -1;

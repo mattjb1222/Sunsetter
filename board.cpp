@@ -1028,33 +1028,6 @@ int boardStruct::playMove(move m, int report)
    changeBoard(m); 
 
 
-   if (currentRules == BUGHOUSE)
-      { 
-				/* Do stuff to keep track of promotions.  
-                This is done is changeBoard() in crazyhouse
-                but for bug it's not so importantt for the
-                search, so time isn't taken up in
-                changeBoard() and it's done here. */
-
-	   // promoted pawns fixed in zh as of 30/08/16, compare if needs fixing here?  (GZ)
-
-      if (promotedPawns.squareIsSet(m.to()))
-         {
-         promotedPawns.unsetSquare(m.to());
-         }
-
-    
-      if (promotedPawns.squareIsSet(m.from()))
-         {
-         promotedPawns.unsetSquare(m.from());
-         promotedPawns.setSquare(m.to());
-         }
-
-      if (m.promotion() != NONE)
-         promotedPawns.setSquare(m.to());
-      }
-
-   
 	if (report == 1) giveMove(m);
 
 	if (gameBoard.isCheckmate() && (!analyzeMode) && (currentRules != BUGHOUSE))
@@ -1313,6 +1286,33 @@ void boardStruct::unchangeBoard()
 void boardStruct::bugChangeBoard(move m)
    {
 
+   int capturedPromotedPawn;
+
+   /* Track promotions (the same way ZHChangeBoard() does it in
+      crazyhouse - "when we capture a promoted pawn all we get is
+      a pawn"): a captured *promoted* piece is only worth its seed
+      pawn to the side that gets it (bughouse: it goes to the
+      holder's holding, shared with the partner - see captureGain()).
+      Done here (not in playMove) so AIBoard (the search board, which
+      goes through changeBoard() directly) has it too.  The flag is
+      saved to takeBackHistory for bugUnchangeBoard(). */
+
+   /* See if we captured or moved a promoted pawn */
+
+   if (promotedPawns.squareIsSet(m.to())) 
+      {
+      promotedPawns.unsetSquare(m.to());
+      capturedPromotedPawn = 1;
+      } 
+   else  
+      capturedPromotedPawn = 0;
+
+   if ((m.from() != IN_HAND) && (promotedPawns.squareIsSet(m.from())))
+      {
+      promotedPawns.unsetSquare(m.from());
+      promotedPawns.setSquare(m.to());
+      }
+
    /* Save the information needed for when
       unchangeBoard() has to restore the position. 
       (capture has to be done after the check to move the pawn back because
@@ -1327,6 +1327,7 @@ void boardStruct::bugChangeBoard(move m)
 #ifdef DEBUG_HASH
    takeBackHistory[moveNum].oldHashT = hashValueT; 
 #endif
+   takeBackHistory[moveNum].capturedPromotedPawn = byte (capturedPromotedPawn);
    
 
    /*  If the move was capturing en passant, then put the captured pawn to 
@@ -1400,6 +1401,7 @@ void boardStruct::bugChangeBoard(move m)
 
       moveAttackedSomething[moveNum+1] = ~(removePiece(onMove, PAWN, m.to(), 1, 1));
       moveAttackedSomething[moveNum+1] &= addPiece(onMove, m.promotion(), m.to(), 1, 1);
+      promotedPawns.setSquare(m.to());
       }
 
 
@@ -1773,7 +1775,17 @@ void boardStruct::bugUnchangeBoard()
       {
       removePiece(onMove, moveHistory[moveNum].promotion(), moveHistory[moveNum].to(), 0, 0);
       addPiece(onMove, PAWN, moveHistory[moveNum].to(), 0, 0);
+      promotedPawns.unsetSquare(moveHistory[moveNum].to());
       }
+
+   /* See if we moved a promoted pawn */
+
+   if (promotedPawns.squareIsSet(moveHistory[moveNum].to())) 
+      {
+      promotedPawns.unsetSquare(moveHistory[moveNum].to());
+      promotedPawns.setSquare(moveHistory[moveNum].from());
+      }
+
    if (takeBackHistory[moveNum].captured == NONE) 
       {
       movePiece(onMove, moveHistory[moveNum].moved(), moveHistory[moveNum].to(), moveHistory[moveNum].from(), 0, 0);
@@ -1785,6 +1797,8 @@ void boardStruct::bugUnchangeBoard()
 
       /*  Bughouse: captures don't touch the hands (see
           bugChangeBoard(); the hash is restored from oldHash) */
+      if (takeBackHistory[moveNum].capturedPromotedPawn) 
+         promotedPawns.setSquare(moveHistory[moveNum].to());
       }
 
    /* Restore the saved information */
