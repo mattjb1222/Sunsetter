@@ -921,6 +921,22 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       if (!partnerIntroSent)
          {
          partnerIntroSent = 1;
+         /* 1 second delay: "partnership" arrives at game start, before
+          * the server's pairing routing has settled - a ptell sent
+          * immediately is lost ("you have no partner") - give it a
+          * moment (the first-ptell fallback trigger doesn't need it:
+          * a ptell arriving from the partner proves the routing works) */
+#ifdef __EMSCRIPTEN__
+         emscripten_sleep_with_yield(1000);
+#else
+#ifdef _win32_
+         sleep(1000);
+#else
+         usleep(1000000);
+#endif
+#endif
+         sprintf(buf, "//D: partnership %s, sending intro ptell\n", partnerName);
+         output(buf);
          givePartnerHelp("intro");
          }
       } 
