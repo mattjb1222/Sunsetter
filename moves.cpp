@@ -7,8 +7,9 @@
  *  Purpose: Has moves() and other functions used for generating legal moves *
  *                                                                           *
  *  Comments: moves() generates legal moves.  It uses the moves that         *
- * AIMoves() generates and adds promotion to bishops and rooks.  Then it     *
- * makes sure that none of the moves put the side in check.                  *
+ * AIMoves() generates (queen and knight promotions come from captureMoves(); *
+ * we never underpromote to rook or bishop - see skippedMoves()).  Then it  *
+ * makes sure that none of the moves put the side in check.                 *
  *                                                                           *
  *************************************************************************** */
 
