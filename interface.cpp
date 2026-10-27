@@ -774,6 +774,8 @@ void parseOption(const char *str)
 				    clocks until it tells us */
 		partnerIsSunsetter = 0;   /* new game, new partner? */
 		partnerDead = partOppDead = 0;   /* new game: not dead yet */
+		partnerIntroSent = 0;   /* re-armed: the usage ptell goes out again
+					   on the first ptell after the (new) partnership */
 		/* Rematch re-arms us: if we were sitting (mated, or waiting
 		 * on "Opp dead") we are blocked in findMove's sit loop
 		 * (pollForInput) - clear the sit + any pending sit state so we
@@ -857,6 +859,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          partner = 0;
 		partnerIsSunsetter = 0;
 		partnerDead = partOppDead = 0;
+		partnerIntroSent = 0;
          output("tellics set formula f4 && f2\n");
          }
       else if (strcmp(partnerName, arg[1]) != 0) 
@@ -870,7 +873,12 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          strcpy(partnerName, arg[1]);
          partner = 1;
          if (strstr(arg[1], "Sunsetter")) partnerIsSunsetter = 1;
-         givePartnerHelp("intro");         
+		/* The usage ptell goes out AFTER the partnership is real,
+		 * not here: the "partner" command arrives when a pairing is
+		 * found (first game), before the partner is actually there -
+		 * re-arm partnerIntroSent; the first ptell we get back from
+		 * it (the ptell handler below) sends it */
+		partnerIntroSent = 0;
          output("tellics set formula f4 && f1 \n");
          output("tellics unseek\n");
          };
@@ -1217,6 +1225,16 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       {
       partner = 1;                 /* We should have gotten "partner" before,
 									but just to make sure */
+      /* The usage ptell goes out on the FIRST ptell we get back from
+       * the partner - that proves the partnership is real (the
+       * "partner" command arrives earlier, when a pairing is found).
+       * Once per partnership: partnerIntroSent is re-armed by
+       * "new"/"accept", a partner change, a partner removal */
+      if (!partnerIntroSent)
+         {
+         partnerIntroSent = 1;
+         givePartnerHelp("intro");
+         }
       /* Bot-vs-bot recognition: the partner identifies itself (the
        * intro ptell "...I am Sunsetter...").  The name is past the
        * 5-token arg[] window, so scan the whole line (a command ptell

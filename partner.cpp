@@ -50,6 +50,15 @@ int partnerDead;
  * / a partner change. */
 int partOppDead;
 
+/* 1 if we already sent the usage ptell (givePartnerHelp("intro"))
+ * to the current partner.  NOT sent at the "partner" command (that
+ * arrives when a pairing is found, first game, before the partner
+ * is actually there): sent on the FIRST ptell we get back from the
+ * partner (the ptell handler in interface.cpp) - that proves the
+ * partnership is real.  Re-armed by "new"/"accept", a partner change
+ * and a partner removal (interface.cpp) */
+int partnerIntroSent;
+
 /* Function: givePartnerHelp
  * Input:    An argument
  * Output:   None
@@ -311,6 +320,35 @@ int matedSitClockOK()
    /* Sit (bank time) only while ahead over the partner's opponent; at
     * or below it, move (delay the mate, feed pieces) */
    return (boardClock(gameBoard.getDeepBugColor()) > partOppTime);
+   }
+
+
+/*
+ * Function: partnerDownOnTime
+ * Input:    None
+ * Output:   1 if the partner is DOWN on time against its opponent
+ *          (our opponent, partOppTime), 0 otherwise
+ * Purpose:  Gates the "ptell sit" requests (the ones that ask the
+ *          partner to sit, so its drops feed OUR board): a partner
+ *          that is losing on time is busy on its own board - drops
+ *          on ours cost it time it can't spare, so we don't ask.
+ *          The request sites (findMove's "in trouble" sit, the main
+ *          loop's time-pressure sit) re-check this every turn and
+ *          parntime keeps the clocks current, so the request re-arms
+ *          by itself on the first turn the partner gets UP on time
+ *          again - its board is quiet then (e.g. our opponent
+ *          sitting long / dead, partOppDead) and the partner has
+ *          time to spare for drops.  Clocks unknown (never told to
+ *          us): not down (we can't verify) - the old behavior asks.
+ */
+
+int partnerDownOnTime()
+   {
+   if (!partnerClockKnown)
+      return 0;
+
+   /* Down on time = strictly behind its opponent */
+   return (partnerTime < partOppTime);
    }
 
 

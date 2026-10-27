@@ -103,6 +103,11 @@ extern int partOppDead;         /* 1 if the partner told us "Opp dead"
 				  time over that opponent, else move until
 				  we are (see partnerOppDeadSit) */
 
+extern int partnerIntroSent;     /* 1 if we already sent the usage
+					  ptell to the current partner (sent on the
+					  first ptell we get back from it, not at the
+					  "partner" command - see partner.cpp) */
+
 int partnerSittingLong();         /* 1 if our partner (another
 				  Sunsetter) is sitting on his own for a
 				  while and up on time - we move instead
@@ -120,6 +125,14 @@ int matedSitClockOK();          /* 1 if, being mated, we should sit (bank
 				  are unknown (can't verify, default to sitting).  When
 				  we are behind (or level) we move - delay the mate,
 				  feed pieces (see partner.cpp) */
+
+int partnerDownOnTime();        /* 1 if the partner is down on time
+					  against its opponent (partOppTime): no
+					  "ptell sit" requests while it is (its drops on
+					  our board cost it time it can't spare); the
+					  request sites re-check every turn, so it re-arms
+					  once the partner gets up on time (see
+					  partner.cpp) */
 
 
 void tellPartnerDirectives();        /* Sunsetter's own piece

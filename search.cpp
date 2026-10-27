@@ -2289,14 +2289,24 @@ void findMove(move *rightMove)
 
 	// the move is not legal => we tried to drop a ghost-piece => sit for it
 	
-	if ((bestValue > -MATE) && (toldparttosit)) 
+	if ((bestValue > -MATE) && (toldparttosit) && ((bestValue >= 0) || (partnerDead))) 
 	
 		{ 
 		output ("tellics ptell go\n"); 
 		toldparttosit = 0; 
 		}
-	
-	// we told our part to sit, its the next move and now we are not mated anymore => he can go again 
+
+	/* We told our part to sit, its the next move and now we are not
+	 * mated anymore => he can go again - but NOT while we are still
+	 * in danger (losing, bestValue < 0, not mated, not attacking):
+	 * keep him sitting (his drops keep feeding us) until we are
+	 * attacking (bestValue >= MATE), safe (bestValue >= 0) or have
+	 * neutralized the threat (bestValue >= 0 = not losing) - all
+	 * three are bestValue >= 0, and bestValue is fresh from the
+	 * search; this is re-checked every turn, so the "go" goes out
+	 * on the first safe/attacking turn.  A DEAD partner (partnerDead)
+	 * can't keep sitting (checkmated board) - release the flag then
+	 * (the "go" is a no-op for a checkmated board) */
 		
 	/* We are mated soon (mate in 1 included).  With no legal move
 	 * left (checkmated, bad rightMove) we always sit for a piece:
@@ -2442,8 +2452,12 @@ void findMove(move *rightMove)
 		 * next turn).  Tell our partner to sit (so we get pieces)
 		 * and re-search, maybe it helps.  In the bot case the
 		 * partner is already sitting (partsitting), so nothing is
-		 * said - just play the delaying move we just searched */
-		if ((bestValue <= -MATE) && (!partsitting)) 
+		 * said - just play the delaying move we just searched.
+		 * Never while the partner itself is DOWN on time against
+		 * its opponent (partnerDownOnTime): its drops on our board
+		 * would cost it time it can't spare - re-checked every turn,
+		 * so the request re-arms the turn it gets up on time again */
+		if ((bestValue <= -MATE) && (!partsitting) && (!partnerDownOnTime())) 
 					{ 
 					reSearch =1; 
 					gameBoard.setLastMoveNow();

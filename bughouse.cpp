@@ -339,7 +339,11 @@ int main(int argc, char **argv)
 			 * would bleed time without knowing we're mated */
 
 			millisecondsPerMove = 10000;
-			if (gameBoard.timeToMove() && (!toldparttosit) && (!partsitting)) {toldparttosit =1; output ("tellics ptell sit\n"); }
+			/* No "ptell sit" while the partner is DOWN on time against
+			 * its opponent (partnerDownOnTime): its drops on our board
+			 * would cost it time it can't spare - the main loop re-
+			 * checks every turn, so it re-arms when it gets up on time */
+			if (gameBoard.timeToMove() && (!toldparttosit) && (!partsitting) && (!partnerDownOnTime())) {toldparttosit =1; output ("tellics ptell sit\n"); }
 			millisecondsPerMove = 100000000;
 		}		
 		
