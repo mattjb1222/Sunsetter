@@ -100,7 +100,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
     output("tellics ptell \"+P\" to \"++Q\": try to take an enemy P (feed me a P).  \"-Q\" to \"--Q\": protect my Q - I move it to safety / refuse to trade it.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until reset - \"+X\" by \"nevermind\", \"-X\" by \"OK now\", both by \"cancel\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.\n");
     output("tellics ptell After a \"-Q\": add \"Mates Me\" and if I can't save the Q I sit and tell you it's coming - tell me \"go\" to make moves anyway.  After a \"+X\": \"Mates Him\" = I sacrifice material to take the X.  A pawn guard (\"-P\") with \"Mates Me\" also covers my bishop and queen (\"-P\" -> \"-B\" \"-Q\"); a pawn take (\"+P\") with \"Mates Him\" also covers them (\"+P\" -> \"+B\" \"+Q\").\n");
-    output("tellics ptell I send these directives myself, once a turn: \"+X\" = I am losing BECAUSE I am down about an X in material (losing by more than I am down is positional - I don't ask then) - feed me an X (one-time: it resets itself once you have taken the X; a rook also pulls in a queen - a queen is a rook and more); \"-X\" = protect an X of mine that is bad for you to take (an enemy piece can net it), or withhold an X (it would hang on my board) - a rook also implies a queen.  I send them bare - without \"Mates Me/Him\": a material request is not a mate claim (send ME \"Mates Me/Him\" to strengthen a directive, see there).  When I cancel a \"+X\" request (no longer needed) I say \"nevermind\"; when a \"-X\" threat is resolved (the piece is safe again) I say \"OK now\".  When I get your \"+X\" (feed me a piece) I say I will try to take it (no \"OK\"); for the standing ones I ack \"OK\" (\"++X\" -> \"OK, I will trade more\"), and for \"-X\" I ack \"OK\" I will protect it (\"--X\" -> \"OK, I will avoid trading\").\n");
+    output("tellics ptell I send these directives myself, once a turn: \"+X\" = I am losing BECAUSE I am down about an X in material (losing by more than I am down is positional - I don't ask then) - feed me an X (one-time: it resets itself once you have taken the X; a rook also pulls in a queen - a queen is a rook and more); \"-X\" = protect an X of mine that is bad for you to take (an enemy piece can net it), or withhold an X (it would hang on my board) - a rook also implies a queen.  I send them bare - without \"Mates Me/Him\": a material request is not a mate claim (send ME \"Mates Me/Him\" to strengthen a directive, see there).  When I cancel a \"+X\" request (no longer needed) I say \"nevermind\"; when a \"-X\" threat is resolved (the piece is safe again) I say \"OK now\"; when a piece I sent \"-X\" for becomes hanging (about to be taken - it can mate you) I say \"Mates Me\" (once while it stays hanging; it re-arms if it is saved and hangs again).  When I get your \"+X\" (feed me a piece) I say I will try to take it (no \"OK\"); for the standing ones I ack \"OK\" (\"++X\" -> \"OK, I will trade more\"), and for \"-X\" I ack \"OK\" I will protect it (\"--X\" -> \"OK, I will avoid trading\").\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
     output("tellics ptell \"nevermind\": cancel the \"+X\" requests (\"feed me a piece\" - I stop trying to take them).  \"OK now\": cancel the \"-X\" protections (\"protect my piece\" - the piece is safe again, I stop guarding it).  \"cancel\"/\"x\": the full reset - both, plus retract a pending \"sit\" before I sat (I keep moving) and reset the trading directive.  None of them gets me up (use \"go\" for that).\n");
   } else if(!strcasecmp(str, "mates")) {
@@ -429,6 +429,10 @@ void tellPartnerClock()
  *           vanished part first (a canceled "+X" with "nevermind", a resolved
  *           "-X" with "OK now" - the receiver understands both) and re-sends
  *           the new set ("x"/"cancel" = full reset also clears them).
+ *           If a piece we sent "-X" for becomes hanging (about to be
+ *           taken - it can mate the partner), we ptell "Mates Me"
+ *           (once per piece while it stays hanging; re-arms when it
+ *           is safe again, no longer bad to take, or captured).
  */
 static int lastSig = 0;	/* signature of the active directive set:
 			   * takeSet*32 + guard mask. Both are piece
@@ -438,6 +442,14 @@ static int lastSig = 0;	/* signature of the active directive set:
 			   * silently on a new game (resetPartnerDirectives): the
 			   * partner restarts, so a stale active set must not be
 			   * "retracted" (spurious nevermind / OK now). */
+
+static int toldMatesMeMask = 0;   /* pieces for which the "Mates Me"
+				   * warning is currently out (bit (p-PAWN)).  The
+				   * warning goes out ONCE while the piece stays
+				   * hanging; re-armed when it is safe again (no
+				   * longer hanging), no longer bad to take (the -X
+				   * retracts with "OK now"), or is captured (gone).
+				   * Reset silently on a new game (like lastSig). */
 
 /* Function: resetPartnerDirectives
  * Input:    None
@@ -452,6 +464,7 @@ void resetPartnerDirectives()
 {
   int i;
   lastSig = 0;
+  toldMatesMeMask = 0;
   partTrade = 0;
   for (i = PAWN; i <= QUEEN; i++)
      partTake[i] = partGuard[i] = partMatesMe[i] = partMatesHim[i] = 0;
@@ -549,6 +562,39 @@ void tellPartnerDirectives()
 
   /* signature: takeSet (request bitmask) * 32 + guard mask */
   sig = takeSet * 32 + guard;
+
+  /* "Mates Me" (engine to partner, informational): one of our pieces
+   * we sent "-X" for (bad for the opponent to take - a clear net -
+   * the piece can mate you) is HANGING (under-attacked, can't be
+   * saved in the current position): the mating piece is about to be
+   * taken, warn the partner.  Runs BEFORE the "state unchanged"
+   * return: the -X may already be out (sig unchanged) while the piece
+   * just became hanging (the opponent's move changed the position).
+   * Once per piece (toldMatesMeMask) - no spam while it stays
+   * hanging; re-arms when it is safe again, no longer bad to take
+   * (the -X retracts with "OK now"), or is captured (gone).  Bughouse
+   * only (the gate above). */
+  {
+  color us = gameBoard.getDeepBugColor();
+
+  for (p = PAWN; p <= QUEEN; p++)
+  {
+  int hang = (gameBoard.havePieceOf(us, p)) && (gameBoard.guardPieceHang(us, p));
+  int bad = (gameBoard.partnerBadPieceGain(p) >= pValue[KNIGHT]);
+
+  if (!(toldMatesMeMask & (1 << (p - PAWN))))
+  {
+  if ((bad) && (hang))
+  {
+  toldMatesMeMask |= (1 << (p - PAWN));
+  output("tellics ptell Mates Me\n");
+  }
+  }
+  else if (!(bad) || !(hang))
+     toldMatesMeMask &= ~(1 << (p - PAWN));   /* safe again / no longer
+							 * nettable / captured: re-arm */
+  }
+  }
 
   if (sig == lastSig) return;	/* state unchanged, no repeat */
 
