@@ -2410,7 +2410,7 @@ void findMove(move *rightMove)
 	}
 	else if (wantSit) 
 	{
-		output ("tellics ptell I sit (your opponent is dead, I'm up on time)\n"); 
+		output ("tellics ptell I sit (my opponent is dead, I'm up on time)\n"); 
 	}
 	else if (obeyPartSit && (bestValue > -MATE)) 
 	{
@@ -2425,16 +2425,10 @@ void findMove(move *rightMove)
 		output ("tellics ptell I am dead soon, tell me \"go\" to make a few moves\ntellics ptell I sit\n"); 
 	}
 	/* We are sitting and mated: tell the partner "I dead" (no more
-	 * pieces come from our board, play fast to win).  Dead = proven
-	 * mate (bestValue <= -MATE) OR effectively mated: down at least a
-	 * queen - in bughouse the terminal mate score is material-based
-	 * (-MATE_IN_ONE + bughouseMateEval(), see the end of search()), so
-	 * a real mate beyond horizon scores as a plain material loss (never
-	 * <= -MATE), and a queen down is effectively mated (the partner
-	 * can count the board as dead).  Sent on every sit after a move
-	 * (toldIDead is cleared below when we move), so the partner tracks
-	 * our dead<->alive state. */
-	if ((bestValue <= -pValue[QUEEN]) && (!toldIDead)) 
+	 * pieces come from our board, play fast to win).  Sent on every
+	 * sit after a move (toldIDead is cleared below when we move), so
+	 * the partner tracks our dead<->alive state. */
+	if ((bestValue <= -MATE) && (!toldIDead)) 
 	{
 		toldIDead = 1;
 		output("tellics ptell I dead\n");
@@ -2451,11 +2445,10 @@ void findMove(move *rightMove)
 	{ 
 		/* We are moving while mated (behind on time over the partner's
 		 * opponent, or the bot-vs-bot feed): we are not dead/sitting
-		 * anymore - re-arm "I dead" for the next sit (same dead
-		 * definition as the sit above: proven mate or a queen down).
-		 * A partner "go" only gets us here when we are BEHIND on time
-		 * (when we're ahead we sit above, regardless of the "go"). */
-		if (bestValue <= -pValue[QUEEN]) toldIDead = 0;
+		 * anymore - re-arm "I dead" for the next sit.  A partner "go"
+		 * only gets us here when we are BEHIND on time (when we're
+		 * ahead we sit above, regardless of the "go"). */
+		if (bestValue <= -MATE) toldIDead = 0;
 		/* Mated soon but keeping to move: we are behind on time over
 		 * the partner's opponent (catch up on the clock),
 		 * or a bot partner (another Sunsetter) is sitting on his
