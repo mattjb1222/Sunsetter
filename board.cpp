@@ -2160,7 +2160,10 @@ piece boardStruct::pieceOnSquare(square sq)
    }
 
 bool boardStruct::isPieceOnSquare(square sq, piece p, color c) {
-	return position[sq] == p && occupied[c].squareIsSet(sq);
+	/*  Use the piece bitboard (authoritative), not position[]: position[] is
+	    maintained incrementally and can lag the bitboards, so the bitboard is
+	    the source of truth for "is p of colour c on sq".  */
+	return pieces[p].squareIsSet(sq) && occupied[c].squareIsSet(sq);
 }
 
 

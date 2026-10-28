@@ -100,7 +100,7 @@ void givePartnerHelp(const char *str)
   } else if(!strcasecmp(str, "directive") || !strcasecmp(str, "directives")) {
     output("tellics ptell \"+P\" to \"++Q\": try to take an enemy P (feed me a P).  \"-Q\" to \"--Q\": protect my Q - I move it to safety / refuse to trade it.  One sign is one-time (I reset it when it's done - the piece was taken/lost); two or more signs stand until reset - \"+X\" by \"nevermind\", \"-X\" by \"OK now\", both by \"cancel\"/\"x\" (\"+++Q\" = \"++Q\", \"----Q\" = \"--Q\").  \"++\" to \"++++\": trading is good; \"--\" to \"----\": trading is bad.\n");
     output("tellics ptell After a \"-Q\": add \"Mates Me\" and if I can't save the Q I sit and tell you it's coming - tell me \"go\" to make moves anyway.  After a \"+X\": \"Mates Him\" = I sacrifice material to take the X.  A pawn guard (\"-P\") with \"Mates Me\" also covers my bishop and queen (\"-P\" -> \"-B\" \"-Q\"); a pawn take (\"+P\") with \"Mates Him\" also covers them (\"+P\" -> \"+B\" \"+Q\").\n");
-    output("tellics ptell I send these directives myself, once a turn: \"+X\" = I am losing BECAUSE I am down about an X in material (losing by more than I am down is positional - I don't ask then) - feed me an X (one-time: it resets itself once you have taken the X; a rook also pulls in a queen - a queen is a rook and more); \"-X\" = protect an X of mine that is bad for you to take (an enemy piece can net it), or withhold an X (it would hang on my board) - a rook also implies a queen.  I send them bare - without \"Mates Me/Him\": a material request is not a mate claim (send ME \"Mates Me/Him\" to strengthen a directive, see there).  When I cancel a \"+X\" request (no longer needed) I say \"nevermind\"; when a \"-X\" threat is resolved (the piece is safe again) I say \"OK now\"; when a piece I sent \"-X\" for becomes hanging (about to be taken - it can mate you) I say \"Mates Me\" (once while it stays hanging; it re-arms if it is saved and hangs again).  When I get your \"+X\" (feed me a piece) I say I will try to take it (no \"OK\"); for the standing ones I ack \"OK\" (\"++X\" -> \"OK, I will trade more\"), and for \"-X\" I ack \"OK\" I will protect it (\"--X\" -> \"OK, I will avoid trading\").\n");
+    output("tellics ptell I send these directives myself, once a turn: \"+X\" = I am losing BECAUSE I am down about an X in material (losing by more than I am down is positional - I don't ask then) - feed me an X (one-time: it resets itself once you have taken the X; a rook also pulls in a queen - a queen is a rook and more); \"-X\" = protect an X of mine that is bad for you to take (an enemy piece can net it), or withhold an X (it would hang on my board) - a rook also implies a queen.  I send them bare - without \"Mates Me/Him\": a material request is not a mate claim (send ME \"Mates Me/Him\" to strengthen a directive, see there).  When I cancel a \"+X\" request (no longer needed) I say \"nevermind\"; when a \"-X\" threat is resolved (the piece is safe again) I say \"OK now\"; when a piece I sent \"-X\" for is needed by the opponent to checkmate me (they can take it and drop it for mate, or already hold one that can) I say \"Mates Me\" (once while it stays needed; it re-arms when it stops being).  When I get your \"+X\" (feed me a piece) I say I will try to take it (no \"OK\"); for the standing ones I ack \"OK\" (\"++X\" -> \"OK, I will trade more\"), and for \"-X\" I ack \"OK\" I will protect it (\"--X\" -> \"OK, I will avoid trading\").\n");
   } else if(!strcasecmp(str, "nevermind") || !strcasecmp(str, "x")) {
     output("tellics ptell \"nevermind\": cancel the \"+X\" requests (\"feed me a piece\" - I stop trying to take them).  \"OK now\": cancel the \"-X\" protections (\"protect my piece\" - the piece is safe again, I stop guarding it).  \"cancel\"/\"x\": the full reset - both, plus retract a pending \"sit\" before I sat (I keep moving) and reset the trading directive.  None of them gets me up (use \"go\" for that).\n");
   } else if(!strcasecmp(str, "mates")) {
@@ -429,10 +429,12 @@ void tellPartnerClock()
  *           vanished part first (a canceled "+X" with "nevermind", a resolved
  *           "-X" with "OK now" - the receiver understands both) and re-sends
  *           the new set ("x"/"cancel" = full reset also clears them).
- *           If a piece we sent "-X" for becomes hanging (about to be
- *           taken - it can mate the partner), we ptell "Mates Me"
- *           (once per piece while it stays hanging; re-arms when it
- *           is safe again, no longer bad to take, or captured).
+ *           If a piece we sent "-X" for is needed by the opponent to
+ *           checkmate the partner (partnerNeedsPieceToMate - a copy
+ *           can be dropped for mate, or it can be captured and
+ *           dropped for mate), we ptell "Mates Me" (once per piece
+ *           while it stays needed; re-arms when it stops being
+ *           needed, is no longer bad to take, or is captured).
  */
 static int lastSig = 0;	/* signature of the active directive set:
 			   * takeSet*32 + guard mask. Both are piece
@@ -446,10 +448,11 @@ static int lastSig = 0;	/* signature of the active directive set:
 static int toldMatesMeMask = 0;   /* pieces for which the "Mates Me"
 				   * warning is currently out (bit (p-PAWN)).  The
 				   * warning goes out ONCE while the piece stays
-				   * hanging; re-armed when it is safe again (no
-				   * longer hanging), no longer bad to take (the -X
-				   * retracts with "OK now"), or is captured (gone).
-				   * Reset silently on a new game (like lastSig). */
+				   * needed for the opponent's mate; re-armed when it
+				   * stops being needed, no longer bad to take (the
+				   * -X retracts with "OK now"), or is captured
+				   * (gone).  Reset silently on a new game (like
+				   * lastSig). */
 
 /* Function: resetPartnerDirectives
  * Input:    None
@@ -468,6 +471,88 @@ void resetPartnerDirectives()
   partTrade = 0;
   for (i = PAWN; i <= QUEEN; i++)
      partTake[i] = partGuard[i] = partMatesMe[i] = partMatesHim[i] = 0;
+}
+
+/* Function: partnerNeedsPieceToMate
+ * Input:    A piece type
+ * Output:   1 if the opponent can checkmate us using a piece of
+ *           `type` within two of their moves:
+ *           (a) they can drop a `type` from their hand that delivers
+ *               checkmate (a mate-in-1 drop), or
+ *           (b) they can legally capture one of our `type` pieces -
+ *               checked with the opponent's real legal move generation
+ *               (a pinned attacker doesn't count), and a drop of it
+ *               (now in their hand) delivers checkmate (a mate-in-2
+ *               capture + drop; we "pass" between the two - if the
+ *               sequence exists, it is a real threat that can only be
+ *               avoided by preventing the capture this move).
+ *           "Mates Me" (engine to partner) goes out when one of our
+ *           pieces is NEEDED by the opponent to checkmate the partner.
+ *           Runs on a scratch deep copy (the same mechanism as
+ *           findMove's AIBoard) - gameBoard is not touched; every
+ *           playMove is paired with an unplayMove.  Known omission:
+ *           an en passant capture of one of our pawns (the captured
+ *           pawn sits on a different square than the move's `to`) is
+ *           not counted - a rare line, a missed warning (false
+ *           negative), never a false positive. */
+static int partnerNeedsPieceToMate(piece type)
+{
+  move aim[MAX_MOVES];
+  move aim2[MAX_MOVES];
+  int count, n2, i, j;
+  color us = gameBoard.getDeepBugColor();
+  color en = otherColor(us);
+  boardStruct b;
+
+
+  gameBoard.copy(&b);
+
+
+  b.setColorOnMove(en);      /* the opponent's move (the scratch copy
+                             * is ours to drive) */
+  count = b.moves(aim);
+
+  /* (a): a `type` drop from their current holding that delivers
+   * checkmate.  In bughouse hand[] is the "holding" (populated from
+   * holding reports, not captures), so this is a real, present
+   * capability of theirs. */
+  for (i = 0; i < count; i++)
+     if ((aim[i].from() == IN_HAND) && (aim[i].moved() == type))
+     {
+     b.playMove(aim[i], 0);         /* the drop */
+     b.setColorOnMove(us);          /* it is our move now */
+     if (b.isCheckmate()) return 1;  /* we are the side to move */
+     b.unplayMove();
+     }
+
+  /* (b): a legal capture of our `type`, then a drop of it for mate.
+   * Bughouse: the capture goes to their *holding*, which
+   * bugChangeBoard() does NOT record in hand[] (see there) - so
+   * simulate it: add the captured piece to their holding
+   * (addPieceToHand) after the capture, and take it back
+   * (removePieceFromHand) before unplaying the capture.  Drops
+   * (from == IN_HAND) DO move through hand[] symmetrically in
+   * changeBoard/unchangeBoard, so the playMove/unplayMove pair around
+   * each drop restores hand[] on its own. */
+  for (i = 0; i < count; i++)
+     if ((aim[i].from() != IN_HAND) && (b.isPieceOnSquare(aim[i].to(), type, us)))
+     {
+     b.playMove(aim[i], 0);         /* captures our `type` (-> holding) */
+     b.addPieceToHand(en, type, 0); /* simulate: it is now droppable by
+                                     * them (holding) */
+     b.setColorOnMove(en);          /* they move again (we "pass") */
+     n2 = b.moves(aim2);
+     for (j = 0; j < n2; j++)
+        if ((aim2[j].from() == IN_HAND) && (aim2[j].moved() == type))
+        {
+        b.playMove(aim2[j], 0);
+        if (b.isCheckmate()) { b.unplayMove(); b.removePieceFromHand(en, type, 0); b.unplayMove(); return 1; }
+        b.unplayMove();
+        }
+     b.removePieceFromHand(en, type, 0);   /* undo the simulated holding piece */
+     b.unplayMove();                        /* undo the capture */
+     }
+  return 0;
 }
 
 void tellPartnerDirectives()
@@ -564,35 +649,35 @@ void tellPartnerDirectives()
   sig = takeSet * 32 + guard;
 
   /* "Mates Me" (engine to partner, informational): one of our pieces
-   * we sent "-X" for (bad for the opponent to take - a clear net -
-   * the piece can mate you) is HANGING (under-attacked, can't be
-   * saved in the current position): the mating piece is about to be
-   * taken, warn the partner.  Runs BEFORE the "state unchanged"
-   * return: the -X may already be out (sig unchanged) while the piece
-   * just became hanging (the opponent's move changed the position).
-   * Once per piece (toldMatesMeMask) - no spam while it stays
-   * hanging; re-arms when it is safe again, no longer bad to take
-   * (the -X retracts with "OK now"), or is captured (gone).  Bughouse
-   * only (the gate above). */
+   * we sent "-X" for (bad for the opponent to take - a clear net) is
+   * NEEDED BY THE OPPONENT TO CHECKMATE US (partnerNeedsPieceToMate -
+   * they can drop a copy from their hand for mate, or capture it and
+   * drop it for mate): warn the partner ("Mates Me" = "[my piece]
+   * mates [you]" - and the opponent's mating mechanism requires it).
+   * Runs BEFORE the "state unchanged" return: the -X may already be
+   * out (sig unchanged) while the mate need just appeared (the
+   * opponent's move / capture changed the position).  Once per piece
+   * (toldMatesMeMask) - no spam while it stays needed; re-arms when
+   * it stops being needed, no longer bad to take (the -X retracts
+   * with "OK now"), or is captured (gone).  Bughouse only (the gate
+   * above). */
   {
-  color us = gameBoard.getDeepBugColor();
-
   for (p = PAWN; p <= QUEEN; p++)
   {
-  int hang = (gameBoard.havePieceOf(us, p)) && (gameBoard.guardPieceHang(us, p));
   int bad = (gameBoard.partnerBadPieceGain(p) >= pValue[KNIGHT]);
+  int needsMate = (bad) && partnerNeedsPieceToMate(p);
 
   if (!(toldMatesMeMask & (1 << (p - PAWN))))
   {
-  if ((bad) && (hang))
+  if (needsMate)
   {
   toldMatesMeMask |= (1 << (p - PAWN));
   output("tellics ptell Mates Me\n");
   }
   }
-  else if (!(bad) || !(hang))
-     toldMatesMeMask &= ~(1 << (p - PAWN));   /* safe again / no longer
-							 * nettable / captured: re-arm */
+  else if (!needsMate)
+     toldMatesMeMask &= ~(1 << (p - PAWN));   /* no longer needed /
+							 * not bad / captured: re-arm */
   }
   }
 
