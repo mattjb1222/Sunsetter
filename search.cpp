@@ -2057,10 +2057,11 @@ static int toldMoveIsLegal(move m)
  *
  * If our opponent is mated soon (bestValue >= +MATE) we say "Opp dead"
  * (their board is dying).  Sent once per game (toldOppDead, reset in
- * resetAI).  We say "I dead" from findMove's sit block instead (tied to
- * the actual sit, re-sent on sit-after-move - see there): sitting is now
- * clock-dependent (we sit only while ahead over the partner's opponent),
- * so "I dead" must track the sit, not just the proven mate.
+ * resetAI).  We say "I dead" from findMove's sit block and its
+ * mated-move branch (tied to being mated: sent once, re-armed when
+ * the mate is avoided).  Sitting is now clock-dependent (we sit only
+ * while ahead over the partner's opponent), so "I dead" must track
+ * the mate, not just one sit.
  *
  * We do NOT report a moves-to-checkmate count: in bughouse the terminal
  * mate score is material-based (-MATE_IN_ONE + bughouseMateEval(), see the
@@ -2072,7 +2073,7 @@ static int toldMoveIsLegal(move m)
  * it matters. */
 
 static int toldOppDead = 0;      /* sent "Opp dead" this game */
-static int toldIDead = 0;        /* sent "I dead" (cleared when we move, re-sent on the next sit) */
+static int toldIDead = 0;        /* sent "I dead" (re-armed when we are no longer mated; sent on a mated sit or a mated move) */
 
 static void declareBoardDead(int bestValue)
    {
@@ -2349,10 +2350,11 @@ void findMove(move *rightMove)
 	 * else to do) */
 	int keepToMove = partnerSittingLong();
 
-	/* "Opp dead" (the partner's opponent is dead): sit when we're
-	 * ahead on time over it, else move until we are (re-checked
-	 * every turn, see partnerOppDeadSit) */
-	int wantSit = partnerOppDeadSit();
+	/* "Opp dead" (the partner's opponent is dead): sit (and report
+	 * "I sit") only when we are dead soon ourselves (proven mate,
+	 * bestValue <= -MATE) and ahead on time over it, else move until
+	 * we are (re-checked every turn, see partnerOppDeadSit) */
+	int wantSit = partnerOppDeadSit() && (bestValue <= -MATE);
 
 	/* Mated with legal moves left: sit (bank time, "I dead") only
 	 * while ahead on time over the partner's opponent, else move
@@ -2426,8 +2428,9 @@ void findMove(move *rightMove)
 	}
 	/* We are sitting and mated: tell the partner "I dead" (no more
 	 * pieces come from our board, play fast to win).  Sent on every
-	 * sit after a move (toldIDead is cleared below when we move), so
-	 * the partner tracks our dead<->alive state. */
+	 * sit after a move; toldIDead re-arms when the mate is avoided
+	 * (see the move branch below), so the partner tracks our
+	 * dead<->alive state. */
 	if ((bestValue <= -MATE) && (!toldIDead)) 
 	{
 		toldIDead = 1;
@@ -2443,12 +2446,23 @@ void findMove(move *rightMove)
     else 
 
 	{ 
-		/* We are moving while mated (behind on time over the partner's
-		 * opponent, or the bot-vs-bot feed): we are not dead/sitting
-		 * anymore - re-arm "I dead" for the next sit.  A partner "go"
-		 * only gets us here when we are BEHIND on time (when we're
-		 * ahead we sit above, regardless of the "go"). */
-		if (bestValue <= -MATE) toldIDead = 0;
+		/* Mated while moving (behind on time over the partner's
+		 * opponent, or the bot-vs-bot feed): we are actually dying -
+		 * also tell the partner "I dead" (they stop counting on
+		 * drops, play fast; our last captures still reach them).
+		 * Sent once: toldIDead re-arms when the mate is avoided
+		 * (bestValue > -MATE, below).  A partner "go" only gets us
+		 * here when we are BEHIND on time (when we're ahead we sit
+		 * above, regardless of the "go"). */
+		if ((currentRules == BUGHOUSE) && (bestValue <= -MATE)) 
+		{
+		if (!toldIDead) 
+		{
+		toldIDead = 1;
+		output("tellics ptell I dead\n");
+		}
+		}
+		else toldIDead = 0;   /* mate avoided (or not bughouse): re-arm */
 		/* Mated soon but keeping to move: we are behind on time over
 		 * the partner's opponent (catch up on the clock),
 		 * or a bot partner (another Sunsetter) is sitting on his
