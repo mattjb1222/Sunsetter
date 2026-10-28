@@ -720,8 +720,17 @@ assert (n <= count); // this checks that the hash move we
 	   * and guaranteed to be searched; without this the eval would
 	   * still prefer a quiet move over a costly take) */
 	  { piece vc = AIBoard.pieceOnSquare(searchMoves[0][0].to());
-	  if ((vc != NONE) && (partMatesHim[vc])) value += 2000; }
 
+	  if ((vc != NONE) && (partMatesHim[vc])) {
+	    value += 2000;
+
+	    /* "Mates him" = sacrifice ANY material: floor the requested
+	       * capture just above the current best, so a losing capture
+	       * (protected piece, recapture of any value) still gets played
+	       * -- an actual mate (MATE and up) always beats it. */
+	    if (((*bestValue + 1) < MATE) && (value < (*bestValue + 1)))
+	       value = (*bestValue + 1);
+}}
 	
 
 #ifdef GAMETREE
@@ -772,7 +781,13 @@ assert (n <= count); // this checks that the hash move we
 	  /* Partner "Mates Him": see searchFirstMove above - hard push
 	   * on the root selection of a take of the requested piece */
 	  { piece vc = AIBoard.pieceOnSquare(searchMoves[0][movesSearched].to());
-	  if ((vc != NONE) && (partMatesHim[vc])) value += 2000; }	
+
+	  if ((vc != NONE) && (partMatesHim[vc])) {
+	    value += 2000;
+	    /* "Mates him" = any-material floor, see searchFirstMove above */
+	    if (((*bestValue + 1) < MATE) && (value < (*bestValue + 1)))
+	       value = (*bestValue + 1);
+}}
       values[movesSearched] = value;
 
 	  // we are out of time, and are not failing high  
