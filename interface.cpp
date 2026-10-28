@@ -774,8 +774,6 @@ void parseOption(const char *str)
 				    clocks until it tells us */
 		partnerIsSunsetter = 0;   /* new game, new partner? */
 		partnerDead = partOppDead = 0;   /* new game: not dead yet */
-		partnerIntroSent = 0;   /* re-armed: the usage ptell goes out again
-					   on the first ptell after the (new) partnership */
 		/* Rematch re-arms us: if we were sitting (mated, or waiting
 		 * on "Opp dead") we are blocked in findMove's sit loop
 		 * (pollForInput) - clear the sit + any pending sit state so we
@@ -859,7 +857,6 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          partner = 0;
 		partnerIsSunsetter = 0;
 		partnerDead = partOppDead = 0;
-		partnerIntroSent = 0;
          output("tellics set formula f4 && f2\n");
          }
       else if (strcmp(partnerName, arg[1]) != 0) 
@@ -873,15 +870,10 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
          strcpy(partnerName, arg[1]);
          partner = 1;
          if (strstr(arg[1], "Sunsetter")) partnerIsSunsetter = 1;
-		/* The usage ptell goes out on "partnership" (icsdroneng
-		 * relays the server's partnership-confirmed message at game
-		 * start - see the partnership command below), or, with an
-		 * older icsdroneng that doesn't send it, on the FIRST ptell
-		 * we get back (the ptell handler below) - that proves the
-		 * partnership is real (the "partner" command arrives when a
-		 * pairing is found, before the partner is actually there).
-		 * Re-arm partnerIntroSent here */
-		partnerIntroSent = 0;
+		/* The usage ptell goes out ONLY on "partnership" (icsdroneng
+		 * relays the server's partnership-confirmed message to us the
+		 * moment it happens - before the game starts; see the
+		 * partnership command below) */
          output("tellics set formula f4 && f1 \n");
          output("tellics unseek\n");
          };
@@ -889,17 +881,20 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
    else if (!strcmp(arg[0], "partnership")) 
       {
       /* icsdroneng: the server's partnership-confirmed message
-       * ("X agrees to be your partner", or the offer it just
-       * accepted) was relayed - the partnership is REAL (icsdroneng
-       * sends this at game start, so the partner's game exists and
-       * the ptell below is deliverable - not at the pairing-found
-       * moment).  Normally the "partner" command already set
+       * ("X agrees to be your partner", "You agree to be X's
+       * partner", or the offer it just accepted) was relayed the
+       * MOMENT it happened - before the game starts (icsdroneng's
+       * engine is always running, started when icsdroneng logged in,
+       * so this command is deliverable pre-game).  This is the ONLY
+       * trigger for the usage ptell: it goes out 1 second after the
+       * partnership (the delay gives the server's pairing routing a
+       * moment to settle; a ptell sent immediately can be lost).  It
+       * is sent once per partnership (partnerIntroSent, re-armed by a
+       * partner change and a partner removal; a "new"/"accept" does
+       * NOT re-arm it, so a rematch with the same partner stays
+       * quiet).  Normally the "partner" command already set
        * partnerName; a differing name (or a missing "partner"
-       * command) is treated like a partner change.  Send the usage
-       * ptell - once per partnership (partnerIntroSent, re-armed by
-       * new/accept, a partner change and a partner removal).  An
-       * older icsdroneng without this command is covered by the
-       * first-ptell fallback in the ptell handler below */
+       * command) is treated like a partner change */
       if (arg[1][0]) 
          {
          char *realName = arg[1];
@@ -912,6 +907,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
             partnerIsSunsetter = 0;
             if (strstr(realName, "Sunsetter")) partnerIsSunsetter = 1;
             partnerDead = partOppDead = 0;
+            partnerIntroSent = 0;   /* a DIFFERENT partner: re-arm */
             sprintf(buf, "tellics seek %s\n", partnerName);
             output(buf);
             output("tellics set formula f4 && f1 \n");
@@ -921,11 +917,9 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       if (!partnerIntroSent)
          {
          partnerIntroSent = 1;
-         /* 1 second delay: "partnership" arrives at game start, before
-          * the server's pairing routing has settled - a ptell sent
-          * immediately is lost ("you have no partner") - give it a
-          * moment (the first-ptell fallback trigger doesn't need it:
-          * a ptell arriving from the partner proves the routing works) */
+         /* 1 second delay: the partnership just became real; the
+          * server's pairing routing needs a moment to settle - a
+          * ptell sent immediately is lost ("you have no partner") */
 #ifdef __EMSCRIPTEN__
          emscripten_sleep_with_yield(1000);
 #else
@@ -1282,18 +1276,6 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       {
       partner = 1;                 /* We should have gotten "partner" before,
 									but just to make sure */
-      /* The usage ptell also goes out here as a FALLBACK trigger
-       * (with an older icsdroneng that doesn't send "partnership")
-       * - the first ptell we get back from the partner proves the
-       * partnership is real (the "partner" command arrives earlier,
-       * when a pairing is found).  Once per partnership:
-       * partnerIntroSent is re-armed by "new"/"accept", a partner
-       * change, a partner removal */
-      if (!partnerIntroSent)
-         {
-         partnerIntroSent = 1;
-         givePartnerHelp("intro");
-         }
       /* Bot-vs-bot recognition: the partner identifies itself (the
        * intro ptell "...I am Sunsetter...").  The name is past the
        * 5-token arg[] window, so scan the whole line (a command ptell
