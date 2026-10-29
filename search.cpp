@@ -1966,10 +1966,12 @@ assert ( stats_positionsSearched < 1000000000 );  // hoping for the day when
 	 {
 		 if (AIBoard.cantBlock())
 		 {
-			/* Add the moves-to-mate term (as crazyhouse does) so a losing engine
-			 * delays the checkmate: it prefers the move whose mate is found at the
-			 * largest ply (most moves to mate) over one decided only by hand material. */
-			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval() + ply / 2 + 1;
+			/* Add the moves-to-mate term so a losing engine delays the
+			 * checkmate: it prefers the move whose mate is found at the largest
+			 * ply (most moves to mate) over one decided only by hand material.
+			 * 1 per ply (2x the old ply/2): a 1-move-to-mate difference scores
+			 * 2cp apart (not 1cp), so the delay preference survives search noise. */
+			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval() + ply + 1;
 		 }
 		 else
 		 {
@@ -2080,8 +2082,8 @@ static int toldMoveIsLegal(move m)
  *
  * We do NOT report a moves-to-checkmate count: in bughouse the terminal
  * mate score is material-based (-MATE_IN_ONE + bughouseMateEval(), see the
- * end of search()), not the count-encoding -MATE_IN_ONE + ply/2 + 1 that
- * crazyhouse uses.  So the main search never proves a specific count;
+ * end of search()) plus an additive moves-to-mate term (ply + 1) to delay
+ * checkmate, not crazyhouse's pure count-encoding.  So the main search never proves a specific count;
  * probing for one (a separate forced search) is slow and, for the common
  * beyond-horizon case, only yields an imprecise "N+".  We just report
  * that the board is dead - the partner's own search gives the count when
