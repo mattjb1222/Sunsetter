@@ -1969,9 +1969,11 @@ assert ( stats_positionsSearched < 1000000000 );  // hoping for the day when
 			/* Add the moves-to-mate term so a losing engine delays the
 			 * checkmate: it prefers the move whose mate is found at the largest
 			 * ply (most moves to mate) over one decided only by hand material.
-			 * 1 per ply (2x the old ply/2): a 1-move-to-mate difference scores
-			 * 2cp apart (not 1cp), so the delay preference survives search noise. */
-			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval() + ply + 1;
+			 * 4 per ply (8x the original ply/2): a 1-move-to-mate difference
+			 * scores 8cp apart (not 1-2cp), so the delay preference is a robust,
+			 * noise-beating margin (survives TT bounds / null-move pruning / ghost
+			 * pieces / clock) while staying small relative to MATE_IN_ONE. */
+			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval() + 4 * ply + 1;
 		 }
 		 else
 		 {
@@ -2082,7 +2084,7 @@ static int toldMoveIsLegal(move m)
  *
  * We do NOT report a moves-to-checkmate count: in bughouse the terminal
  * mate score is material-based (-MATE_IN_ONE + bughouseMateEval(), see the
- * end of search()) plus an additive moves-to-mate term (ply + 1) to delay
+ * end of search()) plus an additive moves-to-mate term (4*ply + 1) to delay
  * checkmate, not crazyhouse's pure count-encoding.  So the main search never proves a specific count;
  * probing for one (a separate forced search) is slow and, for the common
  * beyond-horizon case, only yields an imprecise "N+".  We just report
