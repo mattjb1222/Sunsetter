@@ -593,6 +593,90 @@ static void parseHoldingList(char *list, int counts[PIECES])
       }
    }
 
+/* Diagnostic state logging (gated by debugStateLog).  Emits "DBG:" lines
+ * which icsdrone logs (logcomm) but does not act on (they start with
+ * "DBG:", not "move ", so they match none of its move/command
+ * patterns), so they are safe to interleave with the protocol.  Used to
+ * find where the engine's position (board / holding / side-to-move)
+ * diverges from the ICS move list.  Enable with "debugstate 1" or
+ * SUNSETTER_DEBUGSTATE=1. */
+int debugStateLog = 0;
+
+static const char *debugPieceCh(piece pc)
+   {
+   static const char *ch[7] = {".","p","r","n","b","q","k"};
+   return (pc >= NONE && pc <= KING) ? ch[pc] : "?";
+   }
+
+static unsigned long debugFingerprint(void)
+   {
+   unsigned long fp = 0;
+   int sq, c, p;
+   for (sq = 0; sq < 64; sq++)
+      fp += (unsigned long)((gameBoard.pieceOnSquare(sq) + 1) * (sq + 1));
+   for (c = WHITE; c <= BLACK; c++)
+      for (p = PAWN; p <= QUEEN; p++)
+         fp += (unsigned long)gameBoard.getPieceInHand(c,p) * (100 + 10*c + p);
+   fp += (gameBoard.getColorOnMove() == WHITE) ? 7 : 13;
+   return fp;
+   }
+
+static void debugLogBoardAndHands(char *out)
+   {
+   /* append " board=... holdW=... holdB=..." into out */
+   char b[96];
+   int bi = 0, r, f;
+   for (r = 7; r >= 0; r--)            /* rank 8 (top) -> rank 1 (bottom) */
+      {
+      for (f = 0; f < 8; f++)         /* file a (left) -> file h (right) */
+         {
+         int sq = f * ONE_FILE + r * ONE_RANK;
+         b[bi++] = debugPieceCh(gameBoard.pieceOnSquare(sq))[0];
+         }
+      b[bi++] = '/';
+      }
+   b[bi] = '\0';
+   char hw[64], hb[64];
+   int c, p, hi;
+   for (c = WHITE; c <= BLACK; c++)
+      {
+      char *hh = (c == WHITE) ? hw : hb;
+      static const char *nm[5] = {"P","R","N","B","Q"};
+      hi = 0;
+      hh[hi++] = '[';
+      for (p = PAWN; p <= QUEEN; p++)
+         {
+         int cnt = gameBoard.getPieceInHand(c,p);
+         while (cnt-- > 0) hh[hi++] = nm[p-PAWN][0];
+         }
+      hh[hi++] = ']';
+      hh[hi] = '\0';
+      }
+   sprintf(out, " board=%s holdW=%s holdB=%s", b, hw, hb);
+   }
+
+void debugLogState(const char *tag)
+   {
+   if (!debugStateLog) return;
+   char buf[MAX_STRING];
+   sprintf(buf, "DBG: %s stm=%c fp=%lu\n", tag,
+           (gameBoard.getColorOnMove() == WHITE) ? 'W' : 'B',
+           debugFingerprint());
+   output(buf);
+   }
+
+void debugLogStateFull(const char *tag, const char *moveStr)
+   {
+   if (!debugStateLog) return;
+   char buf[MAX_STRING];
+   sprintf(buf, "DBG: %s %s stm=%c fp=%lu", tag, moveStr,
+           (gameBoard.getColorOnMove() == WHITE) ? 'W' : 'B',
+           debugFingerprint());
+   debugLogBoardAndHands(buf + strlen(buf));
+   strcat(buf, "\n");
+   output(buf);
+   }
+
 void parseOption(const char *str)
    {
 
@@ -1168,6 +1252,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
 	   gameInProgress = 1;
 	   soughtGame = 0;
 	   justPlayedMove = 0;
+	   debugLogStateFull("setboard", "");
 
 #ifndef NDEBUG
 	   gameBoard.showDebugInfo();
@@ -1175,6 +1260,13 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
 
 	   if (analyzeMode) gameBoard.setDeepBugColor(gameBoard.getColorOnMove());
    }
+
+   else if (!strcmp(arg[0], "debugstate"))
+      {
+      debugStateLog = (arg[1][0] == '1');
+      sprintf(buf, "DBG: debugstate now %d\n", debugStateLog);
+      output(buf);
+      }
 
    else if (!strcmp(arg[0], "holding")) 
       {
@@ -1264,6 +1356,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
              * changed decision retracts the stale ptell ("nevermind") and
              * sends the current one (or nothing). */
             tellPartnerDirectives();
+            debugLogStateFull("holding", "");
             }
          }
       }
@@ -1346,11 +1439,13 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       if (sitting) unsit(); /* the drop made our board playable */
       partsitting = 0; partnerDead = 0;   /* the partner made a move (dropped on our board) - no longer sitting (or dead) */
       startSearchOver();
+      { char dbg[96]; snprintf(dbg, sizeof(dbg), "partnerdrop %s", arg[0]); debugLogState(dbg); }
       return;
       }
 
       if (!gameBoard.isLegal(m)) 
          {
+         debugLogStateFull("ILLEGAL", arg[0]);
          sprintf(buf, "Illegal move: %s\n", str);
          output(buf);
          return;
@@ -1373,7 +1468,8 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       else 
          {
          stopThought(); /* Interrupt the pondering */
-		 
+         { char dbg[96]; snprintf(dbg, sizeof(dbg), "applied %s", arg[0]); debugLogState(dbg); }
+		
 		 // if (analyzeMode) gameBoard.setDeepBugColor(gameBoard.getColorOnMove());  
 		/* Instead of the line above 7g Angrims Code (havnt yet checked why) */
 		 if (analyzeMode) {

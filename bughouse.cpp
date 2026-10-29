@@ -271,6 +271,12 @@ int main(int argc, char **argv)
 
   initialize();
 
+  /* Diagnostic state logging (see interface.cpp): enable with the
+   * SUNSETTER_DEBUGSTATE=1 env var (or the "debugstate 1" command). */
+  extern int debugStateLog;
+  if (getenv("SUNSETTER_DEBUGSTATE") && getenv("SUNSETTER_DEBUGSTATE")[0] == '1')
+     debugStateLog = 1;
+
   /* parse the options */
 
   for(n = 1; n < argc; n++) {
