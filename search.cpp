@@ -837,8 +837,18 @@ assert (n <= count); // this checks that the hash move we
   /* values[1] is only valid when there is more than one legal move;
    * with a single move it is stale (it once held a -INFINITY from
    * the skip-ghosts re-search, which killed that re-search after
-   * one ply and hid mate-in-1 positions) */
-  if (((*bestValue > MATE) || (*bestValue < -MATE) || ((count > 1) && (values[1] < -MATE_IN_ONE + 3))) && (!analyzeMode)) stopThought();
+   * one ply and hid mate-in-1 positions).
+   *
+   * We stop on a *winning* mate (bestValue > MATE: we found the mate we're
+   * delivering, no need to search deeper) or when the 2nd-best move is already
+   * a fast mate (nothing better is possible).  We deliberately do NOT stop on a
+   * *losing* mate (bestValue < -MATE): when we are being checkmated we must keep
+   * searching to find the move that DELAYS the mate (a quiet move that buys a
+   * tempo is worth far more than stopping at the first proven mate).  Stopping
+   * here (the old behaviour) made the engine take an immediate mate over a
+   * delaying one (e.g. gxh6 Q@g7# instead of Kh8 ... Nxf7#).  The cost is a
+   * slightly longer search in mated positions; the benefit is delaying the mate. */
+  if (((*bestValue > MATE) || ((count > 1) && (values[1] < -MATE_IN_ONE + 3))) && (!analyzeMode)) stopThought();
 
   // if we mate, are mated or have only 1 move to escape a short mate, then move now in zh.
 
@@ -1966,14 +1976,23 @@ assert ( stats_positionsSearched < 1000000000 );  // hoping for the day when
 	 {
 		 if (AIBoard.cantBlock())
 		 {
-			/* Add the moves-to-mate term so a losing engine delays the
-			 * checkmate: it prefers the move whose mate is found at the largest
-			 * ply (most moves to mate) over one decided only by hand material.
-			 * 4 per ply (8x the original ply/2): a 1-move-to-mate difference
-			 * scores 8cp apart (not 1-2cp), so the delay preference is a robust,
-			 * noise-beating margin (survives TT bounds / null-move pruning / ghost
-			 * pieces / clock) while staying small relative to MATE_IN_ONE. */
-			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval() + 4 * ply + 1;
+			/*
+			 * Add the moves-to-mate term so a losing engine DELAYS the checkmate:
+			 * it prefers the move whose mate is found at the largest ply (most
+			 * moves to mate).  This term must DOMINATE bughouseMateEval(), which
+			 * ranges 0-492 and -- crucially -- DEPENDS ON OUR HOLDING: a capturing
+			 * move adds the piece to holding, lowering bughouseMateEval by ~192-492
+			 * vs a quiet move.  If the delay term were small (e.g. 4*ply = 8cp per
+			 * move-to-mate), the holding swing would override it and the engine
+			 * would take the capturing move (immediate mate) over the delaying move
+			 * (e.g. gxh6 Q@g7# vs Kh8 ... Nxf7#).  So we use 512 per ply (1024cp per
+			 * move-to-mate, > the 492cp max holding swing): delay is primary, the
+			 * holding (bughouseMateEval) is a secondary tiebreaker for equal mates.
+			 * Capped at 8000 so the score stays below -MATE (a true mate, not
+			 * "losing but not mated") even at deep ply.  Via negation the mating
+			 * side still prefers fast mate.
+			 */
+			 bestValue = -MATE_IN_ONE + AIBoard.bughouseMateEval() + min(512 * ply, 8000);
 		 }
 		 else
 		 {
@@ -2084,7 +2103,7 @@ static int toldMoveIsLegal(move m)
  *
  * We do NOT report a moves-to-checkmate count: in bughouse the terminal
  * mate score is material-based (-MATE_IN_ONE + bughouseMateEval(), see the
- * end of search()) plus an additive moves-to-mate term (4*ply + 1) to delay
+ * end of search()) plus an additive moves-to-mate term (min(512*ply, 8000)) to delay
  * checkmate, not crazyhouse's pure count-encoding.  So the main search never proves a specific count;
  * probing for one (a separate forced search) is slow and, for the common
  * beyond-horizon case, only yields an imprecise "N+".  We just report
