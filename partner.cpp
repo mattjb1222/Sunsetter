@@ -640,10 +640,20 @@ void tellPartnerDirectives()
    * and more, so whatever a rook fears a queen fears too (and is worth more,
    * so more worth protecting). */
   guard = 0;
+  /* While we are delivering a forced mate (lastSearchScore >= MATE - the
+   * last findMove's root score, our perspective) our own pieces are moot:
+   * they stop mattering once the mate lands, so don't ask the partner to
+   * guard them (it is noise mid-mating-attack).  A strongly-winning-but-
+   * not-yet-mate position still protects its pieces (they matter then).
+   * lastSearchScore is the previous turn's result (tellPartnerDirectives
+   * runs before findMove) - exactly the "we are still in the mating attack"
+   * signal we want; it is 0 (protect on) until a search has run. */
+  if (lastSearchScore < MATE) {
   for (p = PAWN; p <= QUEEN; p++)
      if (gameBoard.partnerBadPieceGain(p) >= pValue[KNIGHT]) guard |= (1 << (p - PAWN));
   if (hold) guard |= (1 << (hold - PAWN));
   if (guard & (1 << (ROOK - PAWN))) guard |= (1 << (QUEEN - PAWN));
+  }
 
   /* signature: takeSet (request bitmask) * 32 + guard mask */
   sig = takeSet * 32 + guard;
