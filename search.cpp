@@ -1174,7 +1174,9 @@ inline int recursiveFullSearch(int *alpha, int *beta, int *bestValue, move *best
 
 		m = searchMoves[ply]; 
 		
-		count = AIBoard.aiMoves(m); 
+		suppressMatesMeDrops = 1;
+		count = AIBoard.aiMoves(m);
+		suppressMatesMeDrops = 0;
 
 		
 		for ( n = 0; n < count; n++)
@@ -1282,7 +1284,9 @@ int recursiveChecks(int *alpha, int *beta, int *bestValue, move *bestMove, int d
 	
 	value = -INFINITY;
 
+	suppressMatesMeDrops = 1;
 	count = AIBoard.aiMoves(m);
+	suppressMatesMeDrops = 0;
 
 
 

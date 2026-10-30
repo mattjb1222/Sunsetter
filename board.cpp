@@ -30,6 +30,7 @@
 
 boardStruct gameBoard;
 int hashMoveCircle = 0;
+int suppressMatesMeDrops = 0;
 
 #ifdef GAMETREE
 /*

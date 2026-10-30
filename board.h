@@ -757,6 +757,10 @@ struct boardStruct {
 /* Externs */
 
 extern boardStruct gameBoard;   /* The main board */
+extern int suppressMatesMeDrops;  /* 1 only while search generates its own moves: apply
+                               * the "Mates Me" hand-piece drop suppression (aimoves.cpp).
+                               * Kept 0 outside search so moves()/isLegal()/isCheckmate()
+                               * see every legal drop (partner/opponent drops stay valid). */
 extern const int adOffset[8];	/* What to add to a square to make a piece
 									move in an attackDirection */
 extern const piece adPiece[8];  /* What piece (other than the queen) moves
