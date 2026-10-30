@@ -51,6 +51,7 @@
 #include "interface.h"
 #include "bughouse.h"
 #include "brain.h"
+#include "notation.h"
 
 
 #ifdef _win32_
@@ -323,6 +324,11 @@ int main(int argc, char **argv)
 		if ((vc != NONE) && (partTake[vc] == 1)) partTake[vc] = 0; }
 		gameBoard.playMove(m, 1);
 		justPlayedMove = 1;
+		{
+		char mstr[16];
+		DBMoveToRawAlgebraicMove(m, mstr);
+		debugCheckAndLog(mstr);
+		}
 
 		/* We no longer ptell our clocks to the partner after every
 		 * move: with an icsdrone the partner's own drone relays our

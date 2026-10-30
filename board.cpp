@@ -2160,6 +2160,18 @@ piece boardStruct::pieceOnSquare(square sq)
    return position[sq];
    }
 
+int boardStruct::squareIsWhite(square sq)
+   {
+   /* debug aid: color of the piece on sq (from the occupied[] bitboards,
+    * which are the source of truth).  Returns WHITE / BLACK / NONE (no
+    * piece on sq).  Lets the debug board dump show piece color so a
+    * white<->black desync on a square is visible (the old dump was
+    * case-insensitive and hid it). */
+   if (occupied[WHITE].squareIsSet(sq)) return WHITE;
+   if (occupied[BLACK].squareIsSet(sq)) return BLACK;
+   return NONE;
+   }
+
 bool boardStruct::isPieceOnSquare(square sq, piece p, color c) {
 	/*  Use the piece bitboard (authoritative), not position[]: position[] is
 	    maintained incrementally and can lag the bitboards, so the bitboard is
@@ -2325,8 +2337,96 @@ void boardStruct::stopIfBad()
 
    return;
    }
-  
+#endif
 
+
+/*
+ * Function: debugCheckConsistency
+ * Input:    An error buffer (and its size).
+ * Output:   1 if the board is internally consistent; 0 otherwise (fills err).
+ * Purpose:  Like stopIfBad() but always-logging (not assert-gated) and
+ *           detailed, so it works in a -DNDEBUG build when enabled via
+ *           debugstate.  Checks: (1) no square occupied by both colors,
+ *           (2) position[] lines up with occupied[] and pieces[],
+ *           (3) exactly one king of each color on the board.  Used after
+ *           each applied incoming move to pin the exact move that corrupts
+ *           the board (the "missing piece / legal drop rejected" bug).
+ */
+
+int boardStruct::debugCheckConsistency(char *err, int errSize)
+   {
+   square sq;
+   bitboard both;
+   int kings[COLORS];
+
+   err[0] = '\0';
+
+   both = occupied[WHITE] & occupied[BLACK];
+   if (both.hasBits())
+      {
+      sq = firstSquare(both.data);
+      sprintf(err, "sq %d occupied by BOTH colors (position=%d)",
+              sq, position[sq]);
+      return 0;
+      }
+
+   kings[WHITE] = 0; kings[BLACK] = 0;
+
+   for (sq = 0; sq < SQUARES; sq++)
+      {
+      int isW = occupied[WHITE].squareIsSet(sq);
+      int isB = occupied[BLACK].squareIsSet(sq);
+      piece pc = position[sq];
+
+      if (pc != NONE)
+         {
+         if (!isW && !isB)
+            {
+            sprintf(err, "sq %d position=%d but NO occupied bit set",
+                    sq, pc);
+            return 0;
+            }
+         if (isW && isB)
+            {
+            sprintf(err, "sq %d position=%d but BOTH occupied bits set",
+                    sq, pc);
+            return 0;
+            }
+         if (!pieces[pc].squareIsSet(sq))
+            {
+            sprintf(err, "sq %d position=%d but pieces[%d] bit NOT set",
+                    sq, pc, pc);
+            return 0;
+            }
+         if (pc == KING) kings[isW ? WHITE : BLACK]++;
+         }
+      else
+         {
+         if (isW || isB)
+            {
+            sprintf(err, "sq %d position=NONE but an occupied bit IS set (W=%d B=%d)",
+                    sq, isW, isB);
+            return 0;
+            }
+         }
+      }
+
+   if (kings[WHITE] != 1)
+      {
+      sprintf(err, "WHITE has %d kings on board (expected 1)", kings[WHITE]);
+      return 0;
+      }
+   if (kings[BLACK] != 1)
+      {
+      sprintf(err, "BLACK has %d kings on board (expected 1)", kings[BLACK]);
+      return 0;
+      }
+
+   return 1;
+   }
+
+
+#ifndef NDEBUG
 /*
  * Function: badMove()
  * Input:    A move

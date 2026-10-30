@@ -602,10 +602,13 @@ static void parseHoldingList(char *list, int counts[PIECES])
  * SUNSETTER_DEBUGSTATE=1. */
 int debugStateLog = 0;
 
-static const char *debugPieceCh(piece pc)
+static const char *debugPieceCh(piece pc, int isWhite)
    {
-   static const char *ch[7] = {".","p","r","n","b","q","k"};
-   return (pc >= NONE && pc <= KING) ? ch[pc] : "?";
+   static const char *bl[7] = {".","p","r","n","b","q","k"};
+   static const char *wt[7] = {".","P","R","N","B","Q","K"};
+   if (pc == NONE) return ".";
+   if (!(pc >= PAWN && pc <= KING)) return "?";
+   return isWhite ? wt[pc] : bl[pc];
    }
 
 static unsigned long debugFingerprint(void)
@@ -631,7 +634,8 @@ static void debugLogBoardAndHands(char *out)
       for (f = 0; f < 8; f++)         /* file a (left) -> file h (right) */
          {
          int sq = f * ONE_FILE + r * ONE_RANK;
-         b[bi++] = debugPieceCh(gameBoard.pieceOnSquare(sq))[0];
+         b[bi++] = debugPieceCh(gameBoard.pieceOnSquare(sq),
+                                gameBoard.squareIsWhite(sq) == WHITE)[0];
          }
       b[bi++] = '/';
       }
@@ -670,6 +674,37 @@ void debugLogStateFull(const char *tag, const char *moveStr)
    if (!debugStateLog) return;
    char buf[MAX_STRING];
    sprintf(buf, "DBG: %s %s stm=%c fp=%lu", tag, moveStr,
+           (gameBoard.getColorOnMove() == WHITE) ? 'W' : 'B',
+           debugFingerprint());
+   debugLogBoardAndHands(buf + strlen(buf));
+   strcat(buf, "\n");
+   output(buf);
+   }
+
+static long applyTraceSeq = 0;
+
+/* Run the detailed board-consistency check (gated) and log a "TRC BADSTATE"
+ * line if the board is internally inconsistent.  Called after each applied
+ * move to pin the exact move that corrupts position[]/bitboards/kings. */
+void debugCheckAndLog(const char *moveStr)
+   {
+   if (!debugStateLog) return;
+   char err[160];
+   if (!gameBoard.debugCheckConsistency(err, sizeof(err)))
+      {
+      char buf[MAX_STRING];
+      sprintf(buf, "TRC BADSTATE after %s: %s\n", moveStr, err);
+      output(buf);
+      debugLogStateFull("BADSTATE", moveStr);
+      }
+   }
+
+void debugTraceApply(const char *moveStr, const char *status)
+   {
+   if (!debugStateLog) return;
+   char buf[MAX_STRING];
+   sprintf(buf, "TRC APPLY#%ld %s %s stm=%c fp=%lu", applyTraceSeq++,
+           moveStr, status,
            (gameBoard.getColorOnMove() == WHITE) ? 'W' : 'B',
            debugFingerprint());
    debugLogBoardAndHands(buf + strlen(buf));
@@ -1439,13 +1474,14 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       if (sitting) unsit(); /* the drop made our board playable */
       partsitting = 0; partnerDead = 0;   /* the partner made a move (dropped on our board) - no longer sitting (or dead) */
       startSearchOver();
-      { char dbg[96]; snprintf(dbg, sizeof(dbg), "partnerdrop %s", arg[0]); debugLogState(dbg); }
+      { char dbg[96]; snprintf(dbg, sizeof(dbg), "partnerdrop %s", arg[0]); debugLogState(dbg); debugTraceApply(arg[0], "PARTNERDROP"); debugCheckAndLog(arg[0]); }
       return;
       }
 
       if (!gameBoard.isLegal(m)) 
          {
          debugLogStateFull("ILLEGAL", arg[0]);
+         debugTraceApply(arg[0], "REJECTED");
          sprintf(buf, "Illegal move: %s\n", str);
          output(buf);
          return;
@@ -1468,7 +1504,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
       else 
          {
          stopThought(); /* Interrupt the pondering */
-         { char dbg[96]; snprintf(dbg, sizeof(dbg), "applied %s", arg[0]); debugLogState(dbg); }
+         { char dbg[96]; snprintf(dbg, sizeof(dbg), "applied %s", arg[0]); debugLogState(dbg); debugTraceApply(arg[0], "APPLIED"); debugCheckAndLog(arg[0]); }
 		
 		 // if (analyzeMode) gameBoard.setDeepBugColor(gameBoard.getColorOnMove());  
 		/* Instead of the line above 7g Angrims Code (havnt yet checked why) */

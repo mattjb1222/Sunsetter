@@ -556,6 +556,7 @@ struct boardStruct {
   color getColorOffMove();
   square getEnPassantSquare();
   piece pieceOnSquare(square sq);
+  int  squareIsWhite(square sq); /* debug: WHITE/BLACK/NONE color of the piece on sq (from occupied[] bitboards) */
   int havePieceOf(color c, piece p);  /* 1 if `c` has piece `p` on the board */
   int partnerBadPieceGain(piece type);	/* How bad it is for the opponent to
                                            * capture one of our `type` pieces (into
@@ -749,6 +750,8 @@ struct boardStruct {
   int  skippedMoves(move *m);
 
   /* Functions to verify that nothing screwy happened */
+  public:
+  int debugCheckConsistency(char *err, int errSize); /* 1 if position[]/bitboards/king-count consistent (gated logging diagnostic); fills err on failure */
 #ifndef NDEBUG
   void stopIfBad();               /* Halts if the board is messed up */
 #endif

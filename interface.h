@@ -148,4 +148,9 @@ void resetPartnerDirectives();       /* on a new game, silently clear the
 							   * set from the previous game is not
 							   * "retracted" (spurious nevermind / OK now) */
 
+void debugCheckAndLog(const char *moveStr); /* gated (debugstate) board
+					   * consistency check + "TRC BADSTATE" log;
+					   * called after each applied move to pin the
+					   * move that corrupts position[]/bitboards */
+
 #endif
