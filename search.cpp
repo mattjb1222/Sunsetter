@@ -862,17 +862,20 @@ assert (n <= count); // this checks that the hash move we
 
 } // end of iterative deepening
 
-/* Do NOT swindle when we are proven mated (*bestValue < -MATE): there is
- * nothing to complicate (we will be mated regardless), so we must play the
- * move that DELAYS the mate (the deepest/accurate best, Kxd3 in the example
- * below) rather than revert to bestMoveLastPly.  bestMoveLastPly is only
- * ever updated in the first-move branch, so in a losing mate it is stuck on
- * the first-ordered move from an early depth (e.g. Ke1 -> Q@e2#) -- reverting
- * to it makes the engine race to mate.  Swindle still applies to big losses
- * that are not yet proven mates (-EXTREME_EVAL..-MATE).  Example (FatICS
- * bughouse, after ...P@d3+): Ke1 Q@e2# (mated in 2) was played over Kxd3
- * (delays to N@e2# in 6) because swindle reverted to the depth-1 first move. */
-if ((*bestValue <= -EXTREME_EVAL) && (*bestValue > -MATE) && (! bestMoveLastPly.isBad()) && (!analyzeMode))
+/* Do NOT swindle in bughouse at all: swindle mode reverts *rightMove to
+ * bestMoveLastPly (which is only ever updated in the first-move branch, so
+ * it is stuck on the first-ordered move from an early depth).  In bughouse
+ * that makes the engine RACE TO MATE (play the fast mate instead of the move
+ * that DELAYS it) - e.g. Kxd1 (Q@e1# mate in 1) over Kxd2 (delays to R@e1#
+ * in 2).  This is true whether the mate is proven (bestValue < -MATE, deep
+ * search) or not yet seen (time-limited: the fast move's mate is seen but the
+ * delaying move's is beyond the horizon, so bestValue is a clamped static
+ * eval >= -10000, not < -MATE, and the proven-mate guard alone misses it).
+ * "Complicating" a loss is a Crazyhouse concept; in bughouse a losing
+ * position is just delayed / pieces are fed, so keep the deep/accurate best.
+ * For Crazyhouse swindle still applies to big losses that are not yet proven
+ * mates (-EXTREME_EVAL..-MATE). */
+if ((*bestValue <= -EXTREME_EVAL) && (currentRules != BUGHOUSE) && (*bestValue > -MATE) && (! bestMoveLastPly.isBad()) && (!analyzeMode))
  
 {	// Entering swindle mode ... ;)
 
