@@ -2429,7 +2429,7 @@ void findMove(move *rightMove)
 	      || ((bestValue <= -MATE)
 	          && (!keepToMove)
 	          && (matedSit))
-	      || (obeyPartSit && clockSitStillOK())
+	      || (obeyPartSit)
 	      || wantSit))
 	  && (currentRules == BUGHOUSE)) 
 
@@ -2504,11 +2504,14 @@ void findMove(move *rightMove)
 	                    wants a long sit says "sit" again; a "go"
 	                    arriving here (or a drop) ends the sit */
 	/* clock-gated sit (wantSit / matedSit, but NOT a forced mate -
-	 * rightMove->isBad(), and NOT an obeyed partner "sit" - obeyPartSit):
-	 * keep the clock comparison live so we don't sit to the flag when we
-	 * were only just ahead (clocks nearly identical).  Once we fall to or
+	 * rightMove->isBad(), and NOT an obeyed partner "sit" -
+	 * obeyPartSit, which is always obeyed, even past its clock gate;
+	 * the partner decided).  For the clock-gated ones keep the clock
+	 * comparison live (a LIVE partner-opponent clock, see
+	 * partnerBoardClockNow) so we don't sit to the flag when we were
+	 * only just ahead (clocks nearly identical).  Once we fall to or
 	 * below the partner's opponent we get up and take the move branch. */
-	int clockGated = ((wantSit || matedSit || obeyPartSit) && (!rightMove->isBad()));
+	int clockGated = ((wantSit || matedSit) && (!rightMove->isBad()));
 	while ((sitting) && (!reSearch)) 
 	{
 		pollForInput();

@@ -29,6 +29,12 @@ int partner;
 int partnerTime;          /* The partners clock  */
 int partOppTime;         /* The partners opponents clock  */
 int partnerClockKnown;   /* 1 if the partner told us it's clocks  */
+static long partnerClockRelayMs;   /* getSysMilliSecs() when partnerTime /
+                                   * partOppTime were last relayed (server
+                                   * "parntime" or the partner's "time" ptell):
+                                   * lets partnerBoardClockNow() count them down
+                                   * live between relays instead of comparing a
+                                   * draining clock against a stale snapshot */
 
 /* 1 if the partner is another Sunsetter (identified itself, intro
  * ptell "I am Sunsetter", or "Sunsetter" in the partner name):
@@ -169,6 +175,59 @@ static int boardClock(color c)
 
 
 /*
+ * Function: relayPartnerClocks
+ * Input:    partner board clocks, 1/100th seconds
+ * Output:   None
+ * Purpose:  Single entry point for partner-board clock reports (the
+ *          server's "parntime" relay, the partner's "time" ptell):
+ *          stores them and stamps the relay time, so
+ *          partnerBoardClockNow() can count them down between relays.
+ */
+
+void relayPartnerClocks(int pt, int ot)
+   {
+   partnerTime = pt;
+   partOppTime = ot;
+   partnerClockKnown = 1;
+   partnerClockRelayMs = getSysMilliSecs();
+   }
+
+
+/*
+ * Function: partnerBoardClockNow
+ * Input:    0 = the partner's clock, 1 = the partner's opponent's clock
+ * Output:   That clock now, 1/100th seconds (live)
+ * Purpose:  partnerTime / partOppTime are SNAPSHOTS, refreshed only when a
+ *          relay arrives (on partner board moves, or a "time" ptell).  The
+ *          sit/go comparisons (matedSitClockOK, clockSitStillOK,
+ *          partnerOppDeadSit) compare our LIVE clock (boardClock counts it
+ *          down, incl. while we sit) against that snapshot - lopsided: when
+ *          the partner is moving the board runs and the snapshot goes stale,
+ *          so our clock drains below it within our lead and we never sit /
+ *          sit then immediately get up even when we are up on time.  When
+ *          the partner is SITTING the board is stalled (it's his turn there,
+ *          so his opponent's clock is stopped): the snapshot is actually
+ *          current, hold it (and our sitting clock really does drain against
+ *          it - the sit->get-up flip there is correct).  So count the
+ *          partner board clocks down 1:1 since the last relay while the
+ *          board is running: between relays that over-counts a little (the
+ *          partner's own turns freeze his opponent's clock), but the next
+ *          relay (each partner board move) resets the base to the true
+ *          value.  Never relayed: return the snapshot.  partnerClockRelayMs
+ *          is stamped by relayPartnerClocks (parntime / "time" ptell).  */
+
+int partnerBoardClockNow(int which)
+   {
+   int time = ((which == 0) ? partnerTime : partOppTime);
+
+   if ((!partsitting) && (partnerClockRelayMs > 0))
+      time -= (int)((getSysMilliSecs() - partnerClockRelayMs) / 10);
+   if (time < 0) time = 0;
+
+   return time;
+   }
+
+/*
  * Function: canSitByClock
  * Input:    None
  * Output:   1 if we're "up on time" enough to count on pieces being
@@ -225,9 +284,10 @@ int canSitByClock()
    if (ours < (2 * theirs))
       return 0;
 
-   /* The partner is moving and behind, keep moving to feed it pieces */
+   /* The partner is moving and behind, keep moving to feed it pieces
+    * (both live, see partnerBoardClockNow) */
    if (partnerClockKnown && !partsitting
-      && (partnerTime < partOppTime))
+      && (partnerBoardClockNow(0) < partnerBoardClockNow(1)))
       return 0;
 
    /* The partner is sitting, so his board is stalled (his opponent
@@ -277,7 +337,7 @@ int partnerSittingLong()
    {
    if ((!partnerIsSunsetter) || (!partsitting) || (!partnerClockKnown))
       return 0;
-   if ((psittinglong < 5) || (partnerTime <= partOppTime))
+   if ((psittinglong < 5) || (partnerBoardClockNow(0) <= partnerBoardClockNow(1)))
       return 0;
 
    return 1;
@@ -307,7 +367,7 @@ int partnerOppDeadSit()
       return 0;
 
    /* Move until we're ahead on time over the partner's opponent */
-   if (boardClock(gameBoard.getDeepBugColor()) <= partOppTime)
+   if (boardClock(gameBoard.getDeepBugColor()) <= partnerBoardClockNow(1))
       return 0;
 
    return 1;
@@ -339,8 +399,12 @@ int matedSitClockOK()
       return 1;
 
    /* Sit (bank time) only while ahead over the partner's opponent; at
-    * or below it, move (delay the mate, feed pieces) */
-   return (boardClock(gameBoard.getDeepBugColor()) > partOppTime);
+    * or below it, move (delay the mate, feed pieces).  partner's
+    * opponent clock is the LIVE value (counted down since the last
+    * relay while the partner board is running - see
+    * partnerBoardClockNow), so our draining clock is compared against a
+    * draining clock, not a stale snapshot */
+   return (boardClock(gameBoard.getDeepBugColor()) > partnerBoardClockNow(1));
    }
 
 
@@ -365,8 +429,9 @@ int clockSitStillOK()
    if (!partnerClockKnown)
       return 1;
 
-   /* Keep sitting only while still ahead over the partner's opponent */
-   return (boardClock(gameBoard.getDeepBugColor()) > partOppTime);
+   /* Keep sitting only while still ahead over the partner's opponent
+    * (live value - see partnerBoardClockNow) */
+   return (boardClock(gameBoard.getDeepBugColor()) > partnerBoardClockNow(1));
    }
 
 
@@ -394,8 +459,9 @@ int partnerDownOnTime()
    if (!partnerClockKnown)
       return 0;
 
-   /* Down on time = strictly behind its opponent */
-   return (partnerTime < partOppTime);
+   /* Down on time = strictly behind its opponent (both live, see
+    * partnerBoardClockNow) */
+   return (partnerBoardClockNow(0) < partnerBoardClockNow(1));
    }
 
 
@@ -903,7 +969,7 @@ int parsePartnerCommand(const char *arg1, const char *arg2, const char *arg3)
   if (gotDirective) return 1;
 
   if(!strcasecmp(arg1, "time")) {
-    if (arg2[0] != '\0') { partnerTime = atoi(arg2); partOppTime = atoi(arg3); partnerClockKnown = 1; }
+    if (arg2[0] != '\0') relayPartnerClocks(atoi(arg2), atoi(arg3));
     return 1;
   }
 

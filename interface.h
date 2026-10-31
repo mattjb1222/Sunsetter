@@ -93,6 +93,16 @@ extern int partOppTime;            /* The partners opponents clock,
 							  1/100th seconds */
 extern int partnerClockKnown;      /* 1 if the partner told us it's
 							  clocks */
+void relayPartnerClocks(int, int); /* store a partner-board clock report
+							  (server "parntime" relay / partner "time"
+							  ptell) and stamp its relay time, so
+							  partnerBoardClockNow() can count it down
+							  between relays (partner.cpp) */
+int partnerBoardClockNow(int);     /* 0 = the partner's clock, 1 = the
+							  partner's opponent's clock - LIVE: counted
+							  down since the last relay while the partner
+							  board is running, held while the partner is
+							  sitting (board stalled, clocks stopped) */
 extern int partnerIsSunsetter;    /* 1 if the partner is another
 				  Sunsetter (bot-vs-bot coordination) */
 extern int partnerDead;         /* 1 if the partner told us "I (am) dead":

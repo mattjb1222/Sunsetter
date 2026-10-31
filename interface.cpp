@@ -1166,9 +1166,7 @@ output ("//D: variant parsed, board reset and set to bug or zh \n");
        * clock ptells either). */
       if (arg[1][0] != '\0')
       {
-      partnerTime = atoi(arg[1]);
-      partOppTime = atoi(arg[2]);
-      partnerClockKnown = 1;
+      relayPartnerClocks(atoi(arg[1]), atoi(arg[2]));
       }
    }
     
