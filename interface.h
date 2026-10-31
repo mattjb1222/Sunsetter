@@ -129,6 +129,12 @@ int matedSitClockOK();          /* 1 if, being mated, we should sit (bank
 				  we are behind (or level) we move - delay the mate,
 				  feed pieces (see partner.cpp) */
 
+int clockSitStillOK();         /* 1 if we should keep sitting (still ahead
+				  over the partner's opponent), 0 if we fell to/below
+				  it (get up and move).  Re-checked WHILE sitting so we
+				  don't sit to the flag when we were only just ahead
+				  (see partner.cpp) */
+
 int partnerDownOnTime();        /* 1 if the partner is down on time
 					  against its opponent (partOppTime): no
 					  "ptell sit" requests while it is (its drops on

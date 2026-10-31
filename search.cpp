@@ -2492,7 +2492,21 @@ void findMove(move *rightMove)
 	parttoldsit = 0; /* one-shot request, consumed: a partner that
 	                    wants a long sit says "sit" again; a "go"
 	                    arriving here (or a drop) ends the sit */
-	while ((sitting) && (!reSearch)) {pollForInput();} 
+	/* clock-gated sit (wantSit / matedSit, but NOT a forced mate -
+	 * rightMove->isBad(), and NOT an obeyed partner "sit" - obeyPartSit):
+	 * keep the clock comparison live so we don't sit to the flag when we
+	 * were only just ahead (clocks nearly identical).  Once we fall to or
+	 * below the partner's opponent we get up and take the move branch. */
+	int clockGated = ((wantSit || matedSit) && !obeyPartSit && (!rightMove->isBad()));
+	while ((sitting) && (!reSearch)) 
+	{
+		pollForInput();
+		if ((clockGated) && (!clockSitStillOK()))
+		{
+		unsit();          /* fell to/below the partner's opponent */
+		reSearch = 1;     /* re-run: it now takes the move branch */
+		}
+	}
 	}
 
     else 

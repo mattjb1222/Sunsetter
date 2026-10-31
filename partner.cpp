@@ -142,8 +142,25 @@ static int boardClock(color c)
    {
    int time = gameBoard.getTime(c);
 
-   if ((gameBoard.getColorOnMove() == c)
-      && !(sitting && (c == gameBoard.getDeepBugColor())))
+   /* Does this color's clock run right now?  For OUR color it runs while
+    * it is our turn OR while we are sitting (we have left our own board
+    * and are to move on the partner's, so our clock runs there).  The old
+    * code stopped counting our clock down while sitting, leaving boardClock()
+    * stuck at the sit-start value (the drone only refreshes our clock when
+    * OUR board changes, which it does not while we sit) - so the sit<->go
+    * comparison vs partOppTime said we were still ahead even as our clock
+    * drained, and we sat to the flag when we were only just ahead (clocks
+    * nearly identical).  Counting it down here is safe either way: if our
+    * clock is in fact stopped while sitting this merely under-estimates us,
+    * which biases toward moving (safe) rather than sitting to the flag.
+    * For the opponent's color it runs on their turn (unchanged). */
+   int running;
+   if (c == gameBoard.getDeepBugColor())
+      running = ((gameBoard.getColorOnMove() == c) || sitting);
+   else
+      running = (gameBoard.getColorOnMove() == c);
+
+   if (running)
       time -= (int)((getSysMilliSecs() - gameBoard.getLastMoveTime()) / 10);
    if (time < 0) time = 0;
 
@@ -323,6 +340,32 @@ int matedSitClockOK()
 
    /* Sit (bank time) only while ahead over the partner's opponent; at
     * or below it, move (delay the mate, feed pieces) */
+   return (boardClock(gameBoard.getDeepBugColor()) > partOppTime);
+   }
+
+
+/*
+ * Function: clockSitStillOK
+ * Input:    None
+ * Output:   1 if we should keep sitting (still ahead over the partner's
+ *          opponent), 0 if we have fallen to or below it (get up and move)
+ * Purpose:  Re-checked WHILE sitting (findMove's pollForInput loop) for the
+ *          clock-gated sits (wantSit, matedSit).  Without it we sat once we
+ *          were ahead and then blocked in pollForInput() without re-checking,
+ *          so when we were only just ahead (clocks nearly identical) our
+ *          clock drained below the partner's opponent's and we sat to the
+ *          flag.  boardClock() now counts our clock down while sitting, so
+ *          this sees the real balance; partOppTime is kept current by
+ *          "parntime" (relayed by the drone on the partner board's moves).
+ *          Clocks unknown: keep sitting (can't verify - old behavior).
+ */
+
+int clockSitStillOK()
+   {
+   if (!partnerClockKnown)
+      return 1;
+
+   /* Keep sitting only while still ahead over the partner's opponent */
    return (boardClock(gameBoard.getDeepBugColor()) > partOppTime);
    }
 
