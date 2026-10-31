@@ -862,10 +862,20 @@ assert (n <= count); // this checks that the hash move we
 
 } // end of iterative deepening
 
-if ((*bestValue <= -EXTREME_EVAL) && (! bestMoveLastPly.isBad()) && (!analyzeMode))
+/* Do NOT swindle when we are proven mated (*bestValue < -MATE): there is
+ * nothing to complicate (we will be mated regardless), so we must play the
+ * move that DELAYS the mate (the deepest/accurate best, Kxd3 in the example
+ * below) rather than revert to bestMoveLastPly.  bestMoveLastPly is only
+ * ever updated in the first-move branch, so in a losing mate it is stuck on
+ * the first-ordered move from an early depth (e.g. Ke1 -> Q@e2#) -- reverting
+ * to it makes the engine race to mate.  Swindle still applies to big losses
+ * that are not yet proven mates (-EXTREME_EVAL..-MATE).  Example (FatICS
+ * bughouse, after ...P@d3+): Ke1 Q@e2# (mated in 2) was played over Kxd3
+ * (delays to N@e2# in 6) because swindle reverted to the depth-1 first move. */
+if ((*bestValue <= -EXTREME_EVAL) && (*bestValue > -MATE) && (! bestMoveLastPly.isBad()) && (!analyzeMode))
  
 {	// Entering swindle mode ... ;)
- 
+
 		*rightMove = bestMoveLastPly;
 
 }
