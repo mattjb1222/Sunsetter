@@ -2281,7 +2281,7 @@ void findMove(move *rightMove)
 	partGuardOrder = 1;   /* order the root moves (protect X first) for
 	                     * both "-x" alone and "-x" + Mates Me */
 	unsavable = guardRootCheck(&AIBoard, us, gtype);
-	if ((unsavable) && (partMatesMe[gtype]))   /* sit only for "Mates Me"
+	if ((unsavable) && (partMatesMe[gtype]) && clockSitStillOK())   /* sit only for "Mates Me"
 	                                        * ("-x" alone just moves to
 	                                        * safety / refuses to trade) */
 	{
@@ -2292,7 +2292,15 @@ void findMove(move *rightMove)
 	if (partMatesMe[gtype]) output (" is about to be taken, tell me \"go\" to make moves)\n");
 	else output (" is coming, tell me \"go\" to make moves)\n");
 	sitting = 1;
-	while ((sitting) && (!reSearch)) pollForInput();
+	while ((sitting) && (!reSearch)) 
+	{
+		pollForInput();
+		if ((!clockSitStillOK()))
+		{
+		unsit();          /* fell to/below the partner's opponent */
+		reSearch = 1;     /* re-run: guard sit no longer fires, we move */
+		}
+	}
 	guardSkipSearch = 1;   /* the wait ended ("go" or a drop): don't run
 	                         * this searchRoot, re-run the do-while - it
 	                         * re-consumes parttoldgo / the new position */
@@ -2421,7 +2429,7 @@ void findMove(move *rightMove)
 	      || ((bestValue <= -MATE)
 	          && (!keepToMove)
 	          && (matedSit))
-	      || obeyPartSit
+	      || (obeyPartSit && clockSitStillOK())
 	      || wantSit))
 	  && (currentRules == BUGHOUSE)) 
 
@@ -2500,7 +2508,7 @@ void findMove(move *rightMove)
 	 * keep the clock comparison live so we don't sit to the flag when we
 	 * were only just ahead (clocks nearly identical).  Once we fall to or
 	 * below the partner's opponent we get up and take the move branch. */
-	int clockGated = ((wantSit || matedSit) && !obeyPartSit && (!rightMove->isBad()));
+	int clockGated = ((wantSit || matedSit || obeyPartSit) && (!rightMove->isBad()));
 	while ((sitting) && (!reSearch)) 
 	{
 		pollForInput();
